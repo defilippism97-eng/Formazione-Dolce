@@ -1,0 +1,437 @@
+# =============================================================================
+#  GESTIONE ORE FORMAZIONE - Società Dolce
+#  Modello dati Dataverse (fonte unica di verità)
+# -----------------------------------------------------------------------------
+#  Questo file è letto da dataverse/provision.py, che crea in automatico
+#  publisher, soluzione, scelte globali, tabelle, colonne, relazioni, chiavi,
+#  variabili d'ambiente, riferimenti di connessione, ruoli di sicurezza e
+#  profili di sicurezza delle colonne.
+#
+#  Convenzioni
+#  - Prefisso publisher: sdf_   (Società Dolce Formazione)
+#  - SchemaName = LogicalName (tutto minuscolo) per evitare ambiguità nei
+#    flussi e nei nomi delle proprietà di navigazione (@odata.bind).
+#  - Valori delle scelte: prefisso 74150 -> 741500000, 741500001, ...
+#  - display_name = nome visualizzato in Power Apps (Power Fx usa questi nomi).
+#  - secured: <profilo> -> colonna protetta da sicurezza a livello di colonna.
+# =============================================================================
+
+publisher:
+  uniquename: societadolce
+  friendlyname: "Società Dolce"
+  description: "Publisher delle soluzioni Power Platform di Società Dolce"
+  customizationprefix: sdf
+  customizationoptionvalueprefix: 74150
+
+solution:
+  uniquename: GestioneOreFormazione
+  friendlyname: "Gestione ore formazione"
+  version: "1.0.0.0"
+  description: "Rilevazione, approvazione e rendicontazione delle ore di formazione dei lavoratori"
+
+# -----------------------------------------------------------------------------
+#  SCELTE GLOBALI
+#  Il nome visualizzato è al plurale per non collidere con il nome della
+#  colonna in Power Fx (es. colonna 'Stato richiesta' / enum 'Stati richiesta').
+# -----------------------------------------------------------------------------
+choices:
+  sdf_area:
+    display_name: "Aree"
+    description: "Aree organizzative di Società Dolce"
+    options:
+      - { value: 741500000, label: "Area Nord Ovest" }
+      - { value: 741500001, label: "Area Centro" }
+      - { value: 741500002, label: "Area Educativa" }
+      - { value: 741500003, label: "Area Socio Sanitaria" }
+      - { value: 741500004, label: "Area Staff" }
+
+  sdf_statorichiesta:
+    display_name: "Stati richiesta"
+    description: "Ciclo di vita della richiesta di riconoscimento della formazione"
+    options:
+      - { value: 741500000, label: "Bozza",                                   color: "#8A8886" }
+      - { value: 741500001, label: "Inviata al coordinatore",                 color: "#0078D4" }
+      - { value: 741500002, label: "In attesa del coordinatore",              color: "#0078D4" }
+      - { value: 741500003, label: "Integrazione richiesta dal coordinatore", color: "#CA5010" }
+      - { value: 741500004, label: "Respinta dal coordinatore",               color: "#D13438" }
+      - { value: 741500005, label: "Approvata dal coordinatore",              color: "#498205" }
+      - { value: 741500006, label: "In attesa di validazione HR",             color: "#8764B8" }
+      - { value: 741500007, label: "Integrazione richiesta da HR",            color: "#CA5010" }
+      - { value: 741500008, label: "Respinta da HR",                          color: "#D13438" }
+      - { value: 741500009, label: "Validata da HR",                          color: "#107C10" }
+      - { value: 741500010, label: "Inclusa nel riepilogo mensile",           color: "#005B70" }
+      - { value: 741500011, label: "Inviata a Payroll",                       color: "#004E8C" }
+      - { value: 741500012, label: "Annullata",                               color: "#605E5C" }
+
+  sdf_modalita:
+    display_name: "Modalità formative"
+    description: "Modalità di svolgimento della formazione"
+    options:
+      - { value: 741500000, label: "In presenza" }
+      - { value: 741500001, label: "A distanza - sincrona" }
+      - { value: 741500002, label: "A distanza - asincrona" }
+
+  sdf_tipoente:
+    display_name: "Tipi ente erogatore"
+    description: "Corso interno (Datore di lavoro) o esterno (Committente o altro soggetto)"
+    options:
+      - { value: 741500000, label: "Datore di lavoro" }
+      - { value: 741500001, label: "Committente o altro soggetto" }
+
+  sdf_statoperiodo:
+    display_name: "Stati periodo"
+    description: "Stato del periodo mensile di rendicontazione"
+    options:
+      - { value: 741500000, label: "Aperto" }
+      - { value: 741500001, label: "Chiuso" }
+      - { value: 741500002, label: "Riaperto" }
+
+  sdf_statolavoratore:
+    display_name: "Stati lavoratore"
+    options:
+      - { value: 741500000, label: "Attivo" }
+      - { value: 741500001, label: "Non attivo" }
+
+  sdf_originecorso:
+    display_name: "Origini corso"
+    options:
+      - { value: 741500000, label: "Catalogo aziendale" }
+      - { value: 741500001, label: "Inserito dal lavoratore" }
+
+  sdf_statovalidazionecorso:
+    display_name: "Stati validazione corso"
+    options:
+      - { value: 741500000, label: "Da validare" }
+      - { value: 741500001, label: "Validato" }
+      - { value: 741500002, label: "Scartato" }
+
+  sdf_ruoloapp:
+    display_name: "Ruoli applicativi"
+    options:
+      - { value: 741500000, label: "Lavoratore" }
+      - { value: 741500001, label: "Coordinatore" }
+      - { value: 741500002, label: "Formazione HR" }
+      - { value: 741500003, label: "Amministratore" }
+      - { value: 741500004, label: "Sistema" }
+
+# -----------------------------------------------------------------------------
+#  TABELLE
+#  type: text | email | url | memo | int | decimal | bool | date | datetime |
+#        datetime_tzi | choice | lookup | file
+#  - date          = solo data (DateOnly)
+#  - datetime      = data e ora, fuso utente (UserLocal)
+#  - datetime_tzi  = data e ora indipendente dal fuso (usata per gli orari)
+# -----------------------------------------------------------------------------
+tables:
+
+  # ===========================================================================
+  sdf_strutturaorganizzativa:
+    display_name: "Struttura organizzativa"
+    plural_name: "Strutture organizzative"
+    entity_set: sdf_strutture
+    description: "Organigramma: un record per ogni servizio / centro di costo"
+    primary:
+      name: sdf_name
+      display_name: "Servizio"
+      max_length: 200
+    columns:
+      - { name: sdf_area,                        display_name: "Area",                           type: choice, choice: sdf_area, required: true }
+      - { name: sdf_centrodicosto,               display_name: "Centro di costo",                type: text, max_length: 50, required: true }
+      - { name: sdf_coordinatoreresponsabile,    display_name: "Coordinatore responsabile",      type: lookup, target: systemuser, relationship: sdf_struttura_coordresp_systemuser, description: "Responsabile di area / coordinatore responsabile" }
+      - { name: sdf_coordinatoreservizio,        display_name: "Coordinatore servizio",          type: lookup, target: systemuser, relationship: sdf_struttura_coordserv_systemuser }
+      - { name: sdf_emailcoordinatoreservizio,   display_name: "E-mail coordinatore servizio",   type: email }
+      - { name: sdf_upncoordinatoreservizio,     display_name: "Login coordinatore servizio",    type: text, max_length: 200, description: "UPN Microsoft 365 del coordinatore, in minuscolo" }
+      - { name: sdf_datainiziovalidita,          display_name: "Data inizio validità",           type: date }
+      - { name: sdf_datafinevalidita,            display_name: "Data fine validità",             type: date }
+      - { name: sdf_attiva,                      display_name: "Struttura attiva",               type: bool, default: true }
+
+  # ===========================================================================
+  sdf_lavoratore:
+    display_name: "Lavoratore"
+    plural_name: "Lavoratori"
+    entity_set: sdf_lavoratori
+    description: "Anagrafica dei lavoratori e assegnazione organizzativa corrente"
+    primary:
+      name: sdf_name
+      display_name: "Nominativo"
+      max_length: 200
+    columns:
+      - { name: sdf_utentem365,             display_name: "Utente Microsoft 365",               type: lookup, target: systemuser, relationship: sdf_lavoratore_utente_systemuser }
+      - { name: sdf_upn,                    display_name: "Login Microsoft 365",                type: text, max_length: 200, required: true, description: "UPN in minuscolo, es. mario.rossi@societadolce.it" }
+      - { name: sdf_cognome,                display_name: "Cognome",                            type: text, max_length: 100, required: true }
+      - { name: sdf_nome,                   display_name: "Nome",                               type: text, max_length: 100, required: true }
+      - { name: sdf_emailaziendale,         display_name: "E-mail aziendale",                   type: email }
+      - { name: sdf_emailcontatto,          display_name: "E-mail di contatto",                 type: email, description: "Inserita dal lavoratore al primo accesso; usata per le notifiche se manca l'e-mail aziendale" }
+      - { name: sdf_codicefiscale,          display_name: "Codice fiscale",                     type: text, max_length: 16, secured: dati_fiscali }
+      - { name: sdf_cfmascherato,           display_name: "Codice fiscale (mascherato)",        type: text, max_length: 16 }
+      - { name: sdf_cfregistrato,           display_name: "Codice fiscale registrato",          type: bool, default: false }
+      - { name: sdf_struttura,              display_name: "Struttura organizzativa",            type: lookup, target: sdf_strutturaorganizzativa, relationship: sdf_struttura_lavoratori }
+      - { name: sdf_area,                   display_name: "Area",                               type: choice, choice: sdf_area }
+      - { name: sdf_servizio,               display_name: "Servizio",                           type: text, max_length: 200 }
+      - { name: sdf_centrodicosto,          display_name: "Centro di costo",                    type: text, max_length: 50 }
+      - { name: sdf_coordinatore,           display_name: "Coordinatore",                       type: lookup, target: systemuser, relationship: sdf_lavoratore_coordinatore_systemuser }
+      - { name: sdf_upncoordinatore,        display_name: "Login coordinatore",                 type: text, max_length: 200 }
+      - { name: sdf_nomecoordinatore,       display_name: "Nome coordinatore",                  type: text, max_length: 200 }
+      - { name: sdf_emailcoordinatore,      display_name: "E-mail coordinatore",                type: email }
+      - { name: sdf_statolavoratore,        display_name: "Stato lavoratore",                   type: choice, choice: sdf_statolavoratore, default: 741500000 }
+      - { name: sdf_datainizioassegnazione, display_name: "Data inizio validità assegnazione",  type: date }
+      - { name: sdf_datafineassegnazione,   display_name: "Data fine validità assegnazione",    type: date }
+      - { name: sdf_segnalazionevariazione, display_name: "Segnalazione variazione dati",       type: memo, max_length: 2000, description: "Richiesta di variazione dei dati organizzativi inviata dal lavoratore a HR" }
+      - { name: sdf_segnalazioneaperta,     display_name: "Segnalazione da gestire",            type: bool, default: false }
+    alternate_keys:
+      - { name: sdf_key_lavoratore_upn, display_name: "Chiave login", columns: [sdf_upn] }
+
+  # ===========================================================================
+  sdf_corso:
+    display_name: "Corso"
+    plural_name: "Catalogo corsi"
+    entity_set: sdf_corsi
+    description: "Catalogo dei corsi aziendali e corsi esterni inseriti dai lavoratori"
+    primary:
+      name: sdf_name
+      display_name: "Titolo corso"
+      max_length: 300
+    columns:
+      - { name: sdf_codicecorso,      display_name: "Codice univoco corso",       type: text, max_length: 50, description: "Interni: codice HR. Esterni: EXT-<progressivo> generato dall'app" }
+      - { name: sdf_progressivo,      display_name: "Progressivo",                type: text, max_length: 20, autonumber: "{SEQNUM:6}" }
+      - { name: sdf_descrizione,      display_name: "Descrizione",                type: memo, max_length: 4000 }
+      - { name: sdf_tipoente,         display_name: "Ente erogatore",             type: choice, choice: sdf_tipoente, required: true, description: "Datore di lavoro = corso interno; Committente o altro soggetto = corso esterno" }
+      - { name: sdf_nomeente,         display_name: "Nome ente erogatore",        type: text, max_length: 200 }
+      - { name: sdf_tipologia,        display_name: "Tipologia",                  type: text, max_length: 100 }
+      - { name: sdf_modalita,         display_name: "Modalità di svolgimento",    type: choice, choice: sdf_modalita }
+      - { name: sdf_duratacorso,      display_name: "Durata corso (ore)",         type: decimal }
+      - { name: sdf_gettoneprevisto,  display_name: "Gettone previsto",           type: bool, default: false }
+      - { name: sdf_attivo,           display_name: "Corso attivo",               type: bool, default: true }
+      - { name: sdf_piugiornate,      display_name: "Più giornate formative",     type: bool, default: false }
+      - { name: sdf_origine,          display_name: "Origine",                    type: choice, choice: sdf_originecorso, default: 741500000 }
+      - { name: sdf_statovalidazione, display_name: "Stato validazione",          type: choice, choice: sdf_statovalidazionecorso, default: 741500001 }
+      - { name: sdf_upnautore,        display_name: "Login autore",               type: text, max_length: 200, description: "Per i corsi esterni: lavoratore che li ha inseriti (storico personale)" }
+
+  # ===========================================================================
+  sdf_chiusuramensile:
+    display_name: "Chiusura mensile"
+    plural_name: "Chiusure mensili"
+    entity_set: sdf_chiusuremensili
+    description: "Stato di apertura/chiusura dei periodi mensili e file paghe generati"
+    primary:
+      name: sdf_name
+      display_name: "Periodo"
+      max_length: 7
+      description: "Formato AAAA-MM, es. 2026-10"
+    columns:
+      - { name: sdf_mese,                   display_name: "Mese",                       type: int, min: 1, max: 12, required: true }
+      - { name: sdf_anno,                   display_name: "Anno",                       type: int, min: 2020, max: 2100, required: true }
+      - { name: sdf_statoperiodo,           display_name: "Stato del periodo",          type: choice, choice: sdf_statoperiodo, default: 741500000 }
+      - { name: sdf_datachiusura,           display_name: "Data chiusura",              type: datetime }
+      - { name: sdf_utentechiusura,         display_name: "Utente chiusura",            type: lookup, target: systemuser, relationship: sdf_chiusura_utentechiusura_systemuser }
+      - { name: sdf_numerorichieste,        display_name: "Numero richieste incluse",   type: int, min: 0, max: 1000000 }
+      - { name: sdf_totaleorericonosciute,  display_name: "Totale ore riconosciute",    type: decimal, max: 1000000 }
+      - { name: sdf_totalegettoni,          display_name: "Totale gettoni",             type: decimal, max: 1000000 }
+      - { name: sdf_filepaghegenerato,      display_name: "File paghe generato",        type: bool, default: false }
+      - { name: sdf_urlfilepaghe,           display_name: "Collegamento file paghe",    type: url }
+      - { name: sdf_versionefile,           display_name: "Versione file paghe",        type: int, min: 0, max: 100 }
+      - { name: sdf_notehr,                 display_name: "Note HR",                    type: memo, max_length: 4000 }
+      - { name: sdf_datariapertura,         display_name: "Data riapertura",            type: datetime }
+      - { name: sdf_utenteriapertura,       display_name: "Utente riapertura",          type: lookup, target: systemuser, relationship: sdf_chiusura_utenteriapertura_systemuser }
+      - { name: sdf_motivoriapertura,       display_name: "Motivo riapertura",          type: memo, max_length: 2000 }
+    alternate_keys:
+      - { name: sdf_key_chiusura_periodo, display_name: "Chiave periodo", columns: [sdf_name] }
+
+  # ===========================================================================
+  sdf_richiestaformazione:
+    display_name: "Richiesta formazione"
+    plural_name: "Richieste formazione"
+    entity_set: sdf_richiesteformazione
+    description: "Richiesta di riconoscimento delle ore di formazione"
+    primary:
+      name: sdf_name
+      display_name: "ID richiesta"
+      max_length: 30
+      autonumber: "RF-{DATETIMEUTC:yyyy}-{SEQNUM:6}"
+    columns:
+      # --- Lavoratore (copia al momento della richiesta: conserva lo storico organizzativo)
+      - { name: sdf_lavoratore,             display_name: "Lavoratore",                         type: lookup, target: sdf_lavoratore, relationship: sdf_lavoratore_richieste, cascade_delete: Restrict }
+      - { name: sdf_upn,                    display_name: "Login Microsoft 365",                type: text, max_length: 200 }
+      - { name: sdf_cognome,                display_name: "Cognome",                            type: text, max_length: 100 }
+      - { name: sdf_nome,                   display_name: "Nome",                               type: text, max_length: 100 }
+      - { name: sdf_emailaziendale,         display_name: "E-mail aziendale",                   type: email }
+      - { name: sdf_emailcontatto,          display_name: "E-mail di contatto",                 type: email }
+      - { name: sdf_area,                   display_name: "Area",                               type: choice, choice: sdf_area }
+      - { name: sdf_servizio,               display_name: "Servizio",                           type: text, max_length: 200 }
+      - { name: sdf_centrodicosto,          display_name: "Centro di costo",                    type: text, max_length: 50 }
+      - { name: sdf_struttura,              display_name: "Struttura organizzativa",            type: lookup, target: sdf_strutturaorganizzativa, relationship: sdf_struttura_richieste }
+      - { name: sdf_coordinatore,           display_name: "Coordinatore associato",             type: lookup, target: systemuser, relationship: sdf_richiesta_coordinatore_systemuser }
+      - { name: sdf_upncoordinatore,        display_name: "Login coordinatore",                 type: text, max_length: 200 }
+      - { name: sdf_nomecoordinatore,       display_name: "Nome coordinatore",                  type: text, max_length: 200 }
+      - { name: sdf_emailcoordinatore,      display_name: "E-mail coordinatore",                type: email }
+      # --- Corso
+      - { name: sdf_corso,                  display_name: "Corso",                              type: lookup, target: sdf_corso, relationship: sdf_corso_richieste }
+      - { name: sdf_codicecorso,            display_name: "Codice univoco corso",               type: text, max_length: 50 }
+      - { name: sdf_titolocorso,            display_name: "Titolo del corso a catalogo",        type: text, max_length: 300 }
+      - { name: sdf_titolocorsolibero,      display_name: "Titolo corso libero",                type: text, max_length: 300 }
+      - { name: sdf_duratacorso,            display_name: "Durata complessiva corso (ore)",     type: decimal }
+      - { name: sdf_tipoente,               display_name: "Ente erogatore",                     type: choice, choice: sdf_tipoente }
+      - { name: sdf_modalita,               display_name: "Modalità di svolgimento",            type: choice, choice: sdf_modalita }
+      - { name: sdf_piugiornate,            display_name: "Più giornate formative",             type: bool, default: false }
+      # --- Sessione e presenza
+      - { name: sdf_datasessione,           display_name: "Data sessione formativa",            type: date }
+      - { name: sdf_iniziosessione,         display_name: "Ora inizio sessione",                type: datetime_tzi }
+      - { name: sdf_finesessione,           display_name: "Ora fine sessione",                  type: datetime_tzi }
+      - { name: sdf_duratasessione,         display_name: "Durata sessione (ore)",              type: decimal }
+      - { name: sdf_ingresso,               display_name: "Ora ingresso lavoratore",            type: datetime_tzi }
+      - { name: sdf_uscita,                 display_name: "Ora uscita lavoratore",              type: datetime_tzi }
+      - { name: sdf_orefrequentate,         display_name: "Ore frequentate dichiarate",         type: decimal }
+      # --- Ore richieste / riconosciute
+      - { name: sdf_oreretribuiterichieste, display_name: "Ore retribuite richieste",           type: decimal }
+      - { name: sdf_oregettonerichieste,    display_name: "Ore gettone richieste",              type: decimal }
+      - { name: sdf_oreretribuitecoord,     display_name: "Ore retribuite riconosciute coordinatore", type: decimal, secured: coordinatori }
+      - { name: sdf_oregettonecoord,        display_name: "Ore gettone riconosciute coordinatore",    type: decimal, secured: coordinatori }
+      - { name: sdf_oreretribuitehr,        display_name: "Ore retribuite approvate HR",        type: decimal, secured: hr }
+      - { name: sdf_oregettonehr,           display_name: "Ore gettone approvate HR",           type: decimal, secured: hr }
+      # --- Allegati (colonne file: ereditano la sicurezza del record)
+      - { name: sdf_attestato,              display_name: "Attestato",                          type: file, max_size_kb: 10240 }
+      - { name: sdf_altradocumentazione,    display_name: "Altra documentazione",               type: file, max_size_kb: 10240 }
+      - { name: sdf_attestatopresente,      display_name: "Attestato presente",                 type: bool, default: false }
+      # --- Note
+      - { name: sdf_notelavoratore,         display_name: "Note del lavoratore",                type: memo, max_length: 4000 }
+      - { name: sdf_notecoordinatore,       display_name: "Note del coordinatore",              type: memo, max_length: 4000, secured: coordinatori }
+      - { name: sdf_notehr,                 display_name: "Note HR",                            type: memo, max_length: 4000, secured: hr }
+      # --- Stato e date
+      - { name: sdf_stato,                  display_name: "Stato richiesta",                    type: choice, choice: sdf_statorichiesta, default: 741500000, required: true }
+      - { name: sdf_datainvio,              display_name: "Data invio",                         type: datetime }
+      - { name: sdf_dataapprovazionecoord,  display_name: "Data approvazione coordinatore",     type: datetime, secured: coordinatori }
+      - { name: sdf_datavalidazionehr,      display_name: "Data validazione HR",                type: datetime, secured: hr }
+      - { name: sdf_mesecompetenza,         display_name: "Mese di competenza",                 type: int, min: 1, max: 12 }
+      - { name: sdf_annocompetenza,         display_name: "Anno di competenza",                 type: int, min: 2020, max: 2100 }
+      - { name: sdf_chiusuramensile,        display_name: "Chiusura mensile",                   type: lookup, target: sdf_chiusuramensile, relationship: sdf_chiusura_richieste }
+      # --- Dichiarazioni
+      - { name: sdf_confermapartecipazione, display_name: "Conferma partecipazione",            type: bool, default: false }
+      - { name: sdf_confermacorrettezza,    display_name: "Conferma correttezza dati",          type: bool, default: false }
+      - { name: sdf_autorizzazioneinvio,    display_name: "Autorizzazione all'invio",           type: bool, default: false }
+      # --- Controlli e promemoria
+      - { name: sdf_possibileduplicato,     display_name: "Possibile duplicato",                type: bool, default: false }
+      - { name: sdf_anomalie,               display_name: "Anomalie rilevate",                  type: memo, max_length: 4000 }
+      - { name: sdf_giorniattesa,           display_name: "Giorni lavorativi in attesa",        type: int, min: 0, max: 1000 }
+      - { name: sdf_segnalatahr,            display_name: "Sollecito segnalato a HR",           type: bool, default: false }
+
+  # ===========================================================================
+  sdf_registromodifiche:
+    display_name: "Registro modifica"
+    plural_name: "Registro modifiche"
+    entity_set: sdf_registromodifiche
+    description: "Storico delle azioni e variazioni effettuate da lavoratori, coordinatori, HR, amministratori e flussi"
+    primary:
+      name: sdf_name
+      display_name: "Azione"
+      max_length: 200
+    columns:
+      - { name: sdf_richiesta,         display_name: "Richiesta",           type: lookup, target: sdf_richiestaformazione, relationship: sdf_richiesta_registro, parental: true }
+      - { name: sdf_tabella,           display_name: "Tabella",             type: text, max_length: 100 }
+      - { name: sdf_idrecord,          display_name: "ID record",           type: text, max_length: 100 }
+      - { name: sdf_campo,             display_name: "Campo",               type: text, max_length: 200 }
+      - { name: sdf_valoreprecedente,  display_name: "Valore precedente",   type: memo, max_length: 4000 }
+      - { name: sdf_valorenuovo,       display_name: "Valore nuovo",        type: memo, max_length: 4000 }
+      - { name: sdf_ruolo,             display_name: "Ruolo",               type: choice, choice: sdf_ruoloapp }
+      - { name: sdf_upnautore,         display_name: "Login autore",        type: text, max_length: 200 }
+      - { name: sdf_nota,              display_name: "Nota",                type: memo, max_length: 4000 }
+
+# -----------------------------------------------------------------------------
+#  VARIABILI D'AMBIENTE (usate dai flussi)
+# -----------------------------------------------------------------------------
+environment_variables:
+  - { name: sdf_AppUrl,              display_name: "URL app Gestione ore formazione", type: string, default: "https://apps.powerapps.com/play/e/<ID-AMBIENTE>/a/<ID-APP>?tenantId=<ID-TENANT>", description: "URL di avvio dell'app Canvas: i flussi aggiungono &richiesta=<GUID> per il collegamento diretto" }
+  - { name: sdf_EmailHR,             display_name: "E-mail Ufficio HR/Formazione",    type: string, default: "formazione@societadolce.it" }
+  - { name: sdf_DestinatariPayroll,  display_name: "Destinatari file paghe",          type: string, default: "paghe@societadolce.it;formazione@societadolce.it", description: "Indirizzi separati da punto e virgola" }
+  - { name: sdf_SitoSharePointHR,    display_name: "Sito SharePoint HR",              type: string, default: "https://societadolce.sharepoint.com/sites/HR" }
+  - { name: sdf_CartellaPayroll,     display_name: "Cartella file paghe",             type: string, default: "/Documenti condivisi/Formazione/Payroll" }
+  - { name: sdf_Festivita,           display_name: "Festività (JSON)",                type: string, default: '["2026-01-01","2026-01-06","2026-04-06","2026-04-25","2026-05-01","2026-06-02","2026-08-15","2026-11-01","2026-12-08","2026-12-25","2026-12-26","2027-01-01","2027-01-06","2027-03-29","2027-04-25","2027-05-01","2027-06-02","2027-08-15","2027-11-01","2027-12-08","2027-12-25","2027-12-26"]', description: "Giorni festivi esclusi dal conteggio dei giorni lavorativi (AAAA-MM-GG). Aggiungere il patrono locale." }
+
+# -----------------------------------------------------------------------------
+#  RIFERIMENTI DI CONNESSIONE (usati dai flussi)
+# -----------------------------------------------------------------------------
+connection_references:
+  - { name: sdf_ConnDataverse,  display_name: "SDF Dataverse",             connector: shared_commondataserviceforapps }
+  - { name: sdf_ConnOutlook,    display_name: "SDF Office 365 Outlook",    connector: shared_office365 }
+  - { name: sdf_ConnSharePoint, display_name: "SDF SharePoint",            connector: shared_sharepointonline }
+
+# -----------------------------------------------------------------------------
+#  RUOLI DI SICUREZZA
+#  Profondità: user (Utente), bu (Business unit), deep (BU padre-figlio), org (Organizzazione)
+#  Gli utenti devono avere anche il ruolo standard "Basic User" (Utente di base).
+# -----------------------------------------------------------------------------
+security_roles:
+  "SDF - Lavoratore":
+    description: "Lavoratore: gestisce solo le proprie richieste. I coordinatori ricevono lo stesso ruolo: l'accesso alle richieste del team arriva dalla condivisione eseguita dai flussi."
+    privileges:
+      sdf_richiestaformazione: { create: user, read: user, write: user, append: user, appendto: user }
+      sdf_lavoratore:          { read: user, appendto: user }
+      sdf_corso:               { create: user, read: org, write: user, append: user, appendto: org }
+      sdf_strutturaorganizzativa: { read: org, appendto: org }
+      sdf_chiusuramensile:     { read: org }
+      sdf_registromodifiche:   { create: user, read: user, append: user }
+
+  "SDF - Formazione HR":
+    description: "Ufficio HR/Formazione: vede e valida tutte le richieste, chiude il mese, genera il file paghe."
+    privileges:
+      sdf_richiestaformazione: { read: org, write: org, append: org, appendto: org }
+      sdf_lavoratore:          { read: org, write: org, append: org, appendto: org }
+      sdf_corso:               { create: org, read: org, write: org, append: org, appendto: org }
+      sdf_strutturaorganizzativa: { read: org, appendto: org }
+      sdf_chiusuramensile:     { create: org, read: org, write: org, append: org, appendto: org }
+      sdf_registromodifiche:   { create: user, read: org, append: org }
+
+  "SDF - Amministratore":
+    description: "Amministratore applicativo: configurazioni, organigramma, catalogo, riapertura mesi."
+    privileges:
+      sdf_richiestaformazione: { create: org, read: org, write: org, append: org, appendto: org, assign: org, share: org }
+      sdf_lavoratore:          { create: org, read: org, write: org, delete: org, append: org, appendto: org, assign: org, share: org }
+      sdf_corso:               { create: org, read: org, write: org, delete: org, append: org, appendto: org, assign: org, share: org }
+      sdf_strutturaorganizzativa: { create: org, read: org, write: org, delete: org, append: org, appendto: org, assign: org, share: org }
+      sdf_chiusuramensile:     { create: org, read: org, write: org, append: org, appendto: org }
+      sdf_registromodifiche:   { create: user, read: org, append: org }
+
+# -----------------------------------------------------------------------------
+#  PROFILI DI SICUREZZA DELLE COLONNE
+#  Il valore "secured" di ogni colonna indica il gruppo di colonne.
+#  permissions: read / create / update (true/false)
+# -----------------------------------------------------------------------------
+column_security_profiles:
+  "SDF - Lettura esiti":
+    description: "Tutti gli utenti dell'app: lettura degli esiti di coordinatore e HR"
+    groups:
+      coordinatori: { read: true,  create: false, update: false }
+      hr:           { read: true,  create: false, update: false }
+  "SDF - Coordinatori":
+    description: "Coordinatori: inseriscono ore riconosciute, note e data di approvazione"
+    groups:
+      coordinatori: { read: true,  create: true,  update: true }
+      hr:           { read: true,  create: false, update: false }
+  "SDF - Formazione HR":
+    description: "HR e amministratori: ore definitive, note HR e dati fiscali"
+    groups:
+      coordinatori: { read: true,  create: true,  update: true }
+      hr:           { read: true,  create: true,  update: true }
+      dati_fiscali: { read: true,  create: true,  update: true }
+
+# -----------------------------------------------------------------------------
+#  TEAM (gruppi di Microsoft Entra ID consigliati)
+#  Il provisioning crea i team come "team di gruppo Entra" se viene indicato
+#  l'ObjectId del gruppo in config.json; altrimenti va fatto manualmente.
+# -----------------------------------------------------------------------------
+teams:
+  "SDF Lavoratori":
+    entra_group_config_key: gruppo_lavoratori
+    roles: ["SDF - Lavoratore"]
+    column_profiles: ["SDF - Lettura esiti"]
+  "SDF Coordinatori":
+    entra_group_config_key: gruppo_coordinatori
+    roles: ["SDF - Lavoratore"]
+    column_profiles: ["SDF - Coordinatori"]
+  "SDF Formazione HR":
+    entra_group_config_key: gruppo_hr
+    roles: ["SDF - Formazione HR"]
+    column_profiles: ["SDF - Formazione HR"]
+  "SDF Amministratori":
+    entra_group_config_key: gruppo_amministratori
+    roles: ["SDF - Amministratore", "SDF - Formazione HR"]
+    column_profiles: ["SDF - Formazione HR"]

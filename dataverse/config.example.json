@@ -1,0 +1,19 @@
+{
+  "_istruzioni": "Copiare in config.json (escluso da git) e compilare. Gli ID dei gruppi sono gli Object ID dei gruppi di sicurezza Microsoft Entra ID.",
+  "environment_url": "https://<nome-ambiente>.crm4.dynamics.com",
+  "tenant_id": "<ID tenant Microsoft Entra>",
+  "client_id": "",
+  "gruppi_entra": {
+    "gruppo_lavoratori": "",
+    "gruppo_coordinatori": "",
+    "gruppo_hr": "",
+    "gruppo_amministratori": ""
+  },
+  "variabili_ambiente": {
+    "sdf_AppUrl": "",
+    "sdf_EmailHR": "",
+    "sdf_DestinatariPayroll": "",
+    "sdf_SitoSharePointHR": "",
+    "sdf_CartellaPayroll": ""
+  }
+}

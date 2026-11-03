@@ -1,0 +1,6 @@
+Codice univoco corso;Titolo corso;Descrizione;Ente erogatore;Nome ente erogatore;Tipologia;Modalità di svolgimento;Durata corso (ore);Gettone previsto;Corso attivo;Più giornate formative
+ES-SIC-GEN;(Esempio) Formazione generale lavoratori - D.Lgs. 81/08;Formazione generale sulla sicurezza;Datore di lavoro;Società Dolce;Sicurezza sul lavoro;A distanza - asincrona;4;no;sì;no
+ES-SIC-SPE;(Esempio) Formazione specifica rischio alto;Formazione specifica sulla sicurezza;Datore di lavoro;Società Dolce;Sicurezza sul lavoro;In presenza;12;sì;sì;sì
+ES-PS-12;(Esempio) Primo soccorso aziende gruppo B;Corso addetti primo soccorso;Datore di lavoro;Società Dolce;Sicurezza sul lavoro;In presenza;12;sì;sì;sì
+ES-AI-08;(Esempio) Antincendio livello 2;Corso addetti antincendio;Datore di lavoro;Società Dolce;Sicurezza sul lavoro;In presenza;8;sì;sì;no
+ES-HACCP;(Esempio) HACCP - igiene alimentare;Aggiornamento HACCP;Datore di lavoro;Società Dolce;Igiene alimentare;A distanza - sincrona;4;no;sì;no
