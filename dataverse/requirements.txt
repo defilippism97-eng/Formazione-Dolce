@@ -1,4 +1,0 @@
-requests>=2.31
-PyYAML>=6.0
-# necessario solo per --auth devicecode / interactive
-msal>=1.28

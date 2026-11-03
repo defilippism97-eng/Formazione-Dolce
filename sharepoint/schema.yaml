@@ -1,0 +1,366 @@
+# =============================================================================
+#  GESTIONE ORE FORMAZIONE - Società Dolce
+#  Modello dati SharePoint Online (fonte unica di verità)
+# -----------------------------------------------------------------------------
+#  Da questo file sharepoint/genera_template.py produce:
+#   - sharepoint/template/GestioneFormazione.xml  (modello di provisioning PnP)
+#   - docs/02-modello-dati.md                      (documentazione)
+#   - docs/06-api-flussi.md (sezione "Oggetto Richiesta JSON")
+#
+#  Convenzioni
+#  - name         = nome interno SharePoint (ASCII, senza spazi): usato dai flussi
+#  - display_name = nome visualizzato: usato da Power Apps (Power Fx)
+#  - json         = nome del campo negli scambi JSON tra app e flussi (API)
+#  - Gli orari sono testo "HH:mm" (niente problemi di fuso orario).
+#  - Le ore sono numeri con 2 decimali.
+#  - Nessuna colonna di ricerca (lookup): i collegamenti sono ID numerici
+#    (es. LavoratoreRif = ID nella lista Lavoratori), più semplici nei flussi.
+# =============================================================================
+
+site:
+  title: "Gestione ore formazione"
+  url_suggerito: "/sites/GestioneFormazione"
+  description: "Sito riservato dell'app Gestione ore formazione. Non aggiungere membri manualmente: i permessi sono gestiti da gruppi e flussi."
+  lcid: 1040
+  timezone_id: 4   # (UTC+01:00) Amsterdam, Berlino, Berna, Roma, Stoccolma, Vienna
+
+# -----------------------------------------------------------------------------
+#  GRUPPI SHAREPOINT (oltre al gruppo Proprietari del sito)
+# -----------------------------------------------------------------------------
+groups:
+  - name: "Formazione - HR"
+    description: "Ufficio HR/Formazione: lettura di tutte le liste, modifica anagrafica lavoratori. Membri gestiti dal flusso F9 a partire dalla lista Ruoli applicativi."
+    site_role: Reader
+  - name: "Formazione - Paghe"
+    description: "Ufficio Paghe: lettura dei soli file paghe."
+  # Proprietari del sito ({associatedownergroup}): amministratori applicativi + account di servizio dei flussi
+
+# -----------------------------------------------------------------------------
+#  SCELTE
+# -----------------------------------------------------------------------------
+choices:
+  area: ["Area Nord Ovest", "Area Centro", "Area Educativa", "Area Socio Sanitaria", "Area Staff"]
+  stato_richiesta:
+    - "Bozza"
+    - "Inviata al coordinatore"
+    - "In attesa del coordinatore"
+    - "Integrazione richiesta dal coordinatore"
+    - "Respinta dal coordinatore"
+    - "Approvata dal coordinatore"
+    - "In attesa di validazione HR"
+    - "Integrazione richiesta da HR"
+    - "Respinta da HR"
+    - "Validata da HR"
+    - "Inclusa nel riepilogo mensile"
+    - "Inviata a Payroll"
+    - "Annullata"
+  modalita: ["In presenza", "A distanza - sincrona", "A distanza - asincrona"]
+  ente_erogatore: ["Datore di lavoro", "Committente o altro soggetto"]
+  stato_periodo: ["Aperto", "Chiuso", "Riaperto"]
+  stato_lavoratore: ["Attivo", "Non attivo"]
+  origine_corso: ["Catalogo aziendale", "Inserito dal lavoratore"]
+  stato_validazione_corso: ["Da validare", "Validato", "Scartato"]
+  ruolo_registro: ["Lavoratore", "Coordinatore", "Formazione HR", "Amministratore", "Sistema"]
+  ruolo_applicativo: ["Formazione HR", "Amministratore"]
+  tipo_allegato: ["Attestato", "Altra documentazione"]
+
+# Colori degli stati (usati dall'app e nelle e-mail)
+colori_stato:
+  "Bozza": "#8A8886"
+  "Inviata al coordinatore": "#0078D4"
+  "In attesa del coordinatore": "#0078D4"
+  "Integrazione richiesta dal coordinatore": "#CA5010"
+  "Respinta dal coordinatore": "#D13438"
+  "Approvata dal coordinatore": "#498205"
+  "In attesa di validazione HR": "#8764B8"
+  "Integrazione richiesta da HR": "#CA5010"
+  "Respinta da HR": "#D13438"
+  "Validata da HR": "#107C10"
+  "Inclusa nel riepilogo mensile": "#005B70"
+  "Inviata a Payroll": "#004E8C"
+  "Annullata": "#605E5C"
+
+# -----------------------------------------------------------------------------
+#  LISTE E RACCOLTE
+#  type: text | note | number | int | bool | date | datetime | choice | user | url
+#  permissions:
+#    inherit                       -> eredita dal sito (Proprietari: controllo completo; HR: lettura)
+#    break: {copy: bool, add: [{principal, role}]}
+#       principal: owners | everyone | nome gruppo SharePoint
+#       role: Reader | Contributor | Editor | Administrator
+# -----------------------------------------------------------------------------
+lists:
+
+  # ===========================================================================
+  RichiesteFormazione:
+    title: "Richieste formazione"
+    template: 100
+    description: "Richieste di riconoscimento delle ore di formazione. Scrittura solo tramite i flussi API; lettura diretta solo per HR e amministratori."
+    permissions: inherit
+    title_display: "ID richiesta"
+    title_json: idRichiesta
+    versioning: true
+    columns:
+      # --- Lavoratore (copia al momento della richiesta: conserva lo storico organizzativo)
+      - { name: LavoratoreLogin,        display_name: "Login lavoratore",            type: text, indexed: true, json: lavoratoreLogin }
+      - { name: LavoratoreRif,          display_name: "ID lavoratore",               type: int,  json: lavoratoreId }
+      - { name: Cognome,                display_name: "Cognome",                     type: text, json: cognome }
+      - { name: Nome,                   display_name: "Nome",                        type: text, json: nome }
+      - { name: EmailPersonale,         display_name: "E-mail personale",            type: text, json: emailPersonale }
+      - { name: Area,                   display_name: "Area",                        type: choice, choice: area, json: area }
+      - { name: Servizio,               display_name: "Servizio",                    type: text, indexed: true, json: servizio }
+      - { name: CentroDiCosto,          display_name: "Centro di costo",             type: text, indexed: true, json: centroDiCosto }
+      - { name: StrutturaRif,           display_name: "ID struttura",                type: int,  json: strutturaId }
+      - { name: CoordinatoreLogin,      display_name: "Login coordinatore",          type: text, indexed: true, json: coordinatoreLogin }
+      - { name: CoordinatoreNome,       display_name: "Coordinatore",                type: text, json: coordinatoreNome }
+      - { name: CoordinatoreEmail,      display_name: "E-mail coordinatore",         type: text, json: coordinatoreEmail }
+      # --- Corso
+      - { name: CorsoRif,               display_name: "ID corso",                    type: int,  json: corsoId }
+      - { name: CodiceCorso,            display_name: "Codice univoco corso",        type: text, indexed: true, json: codiceCorso }
+      - { name: TitoloCorsoCatalogo,    display_name: "Titolo del corso a catalogo", type: text, json: titoloCorso }
+      - { name: TitoloCorsoLibero,      display_name: "Titolo corso libero",         type: text, json: titoloCorsoLibero }
+      - { name: DurataCorso,            display_name: "Durata complessiva corso",    type: number, json: durataCorso }
+      - { name: EnteErogatore,          display_name: "Ente erogatore",              type: choice, choice: ente_erogatore, json: enteErogatore, description: "Datore di lavoro = corso interno; Committente o altro soggetto = corso esterno" }
+      - { name: Modalita,               display_name: "Modalità di svolgimento",     type: choice, choice: modalita, json: modalita }
+      - { name: PiuGiornate,            display_name: "Più giornate formative",      type: bool, json: piuGiornate }
+      # --- Sessione e presenza
+      - { name: DataSessione,           display_name: "Data sessione formativa",     type: date, indexed: true, json: dataSessione }
+      - { name: OraInizioSessione,      display_name: "Ora inizio sessione",         type: text, max_length: 5, json: oraInizioSessione, description: "HH:mm" }
+      - { name: OraFineSessione,        display_name: "Ora fine sessione",           type: text, max_length: 5, json: oraFineSessione }
+      - { name: DurataSessione,         display_name: "Durata sessione",             type: number, json: durataSessione, description: "Ore (fine - inizio sessione)" }
+      - { name: OraIngresso,            display_name: "Ora ingresso lavoratore",     type: text, max_length: 5, json: oraIngresso }
+      - { name: OraUscita,              display_name: "Ora uscita lavoratore",       type: text, max_length: 5, json: oraUscita }
+      - { name: OreFrequentate,         display_name: "Ore frequentate dichiarate",  type: number, json: oreFrequentate }
+      # --- Ore richieste / riconosciute
+      - { name: OreRetribuiteRichieste, display_name: "Ore retribuite richieste",    type: number, json: oreRetribuiteRichieste }
+      - { name: OreGettoneRichieste,    display_name: "Ore gettone richieste",       type: number, json: oreGettoneRichieste }
+      - { name: OreRetribuiteCoord,     display_name: "Ore retribuite riconosciute coordinatore", type: number, json: oreRetribuiteCoord }
+      - { name: OreGettoneCoord,        display_name: "Ore gettone riconosciute coordinatore",    type: number, json: oreGettoneCoord }
+      - { name: OreRetribuiteHR,        display_name: "Ore retribuite approvate HR", type: number, json: oreRetribuiteHR }
+      - { name: OreGettoneHR,           display_name: "Ore gettone approvate HR",    type: number, json: oreGettoneHR }
+      # --- Allegati (file nella raccolta "Allegati formazione", cartella del coordinatore)
+      - { name: AttestatoUrl,           display_name: "Attestato",                   type: url, json: attestatoUrl }
+      - { name: AltraDocUrl,            display_name: "Altra documentazione",        type: url, json: altraDocUrl }
+      - { name: AttestatoPresente,      display_name: "Attestato presente",          type: bool, json: attestatoPresente }
+      # --- Note
+      - { name: NoteLavoratore,         display_name: "Note del lavoratore",         type: note, json: noteLavoratore }
+      - { name: NoteCoordinatore,       display_name: "Note del coordinatore",       type: note, json: noteCoordinatore }
+      - { name: NoteHR,                 display_name: "Note HR",                     type: note, json: noteHR }
+      # --- Stato e date
+      - { name: Stato,                  display_name: "Stato richiesta",             type: choice, choice: stato_richiesta, default: "Bozza", indexed: true, json: stato }
+      - { name: DataInvio,              display_name: "Data invio",                  type: datetime, json: dataInvio }
+      - { name: DataApprovazioneCoord,  display_name: "Data approvazione coordinatore", type: datetime, json: dataApprovazioneCoord }
+      - { name: DataValidazioneHR,      display_name: "Data validazione HR",         type: datetime, json: dataValidazioneHR }
+      - { name: MeseCompetenza,         display_name: "Mese di competenza",          type: int, indexed: true, json: meseCompetenza }
+      - { name: AnnoCompetenza,         display_name: "Anno di competenza",          type: int, indexed: true, json: annoCompetenza }
+      - { name: PeriodoChiusura,        display_name: "Periodo chiusura",            type: text, max_length: 7, json: periodoChiusura, description: "AAAA-MM della chiusura mensile che ha incluso la richiesta" }
+      # --- Dichiarazioni
+      - { name: ConfermaPartecipazione, display_name: "Conferma partecipazione",     type: bool, json: confermaPartecipazione }
+      - { name: ConfermaCorrettezza,    display_name: "Conferma correttezza dati",   type: bool, json: confermaCorrettezza }
+      - { name: AutorizzazioneInvio,    display_name: "Autorizzazione all'invio",    type: bool, json: autorizzazioneInvio }
+      # --- Controlli, promemoria, tracciamento
+      - { name: PossibileDuplicato,     display_name: "Possibile duplicato",         type: bool, json: possibileDuplicato }
+      - { name: Anomalie,               display_name: "Anomalie rilevate",           type: note, json: anomalie }
+      - { name: GiorniAttesa,           display_name: "Giorni lavorativi in attesa", type: int, json: giorniAttesa }
+      - { name: SegnalataHR,            display_name: "Sollecito segnalato a HR",    type: bool, json: segnalataHR }
+      - { name: UltimaModificaDa,       display_name: "Utente ultima modifica",      type: text, json: ultimaModificaDa, description: "Login di chi ha eseguito l'ultima azione (le scritture avvengono tramite l'account di servizio)" }
+    views:
+      - { name: "Tutte le richieste", default: true, fields: [LinkTitle, Cognome, Nome, CodiceCorso, DataSessione, OreFrequentate, OreRetribuiteRichieste, OreGettoneRichieste, Stato, CoordinatoreNome, Modified], order_by: Modified, ascending: false }
+      - { name: "In attesa del coordinatore", fields: [LinkTitle, Cognome, Nome, CoordinatoreNome, DataInvio, GiorniAttesa, Stato], where_stato: "In attesa del coordinatore" }
+      - { name: "Da validare HR", fields: [LinkTitle, Cognome, Nome, CentroDiCosto, CodiceCorso, DataSessione, OreRetribuiteCoord, OreGettoneCoord, Stato], where_stato: "In attesa di validazione HR" }
+
+  # ===========================================================================
+  Lavoratori:
+    title: "Lavoratori"
+    template: 100
+    description: "Anagrafica dei lavoratori e assegnazione organizzativa corrente."
+    permissions:
+      break: { copy: true, add: [ { principal: "Formazione - HR", role: Contributor } ] }
+    title_display: "Nominativo"
+    versioning: true
+    columns:
+      - { name: UtenteM365,             display_name: "Utente Microsoft 365",        type: user }
+      - { name: Login,                  display_name: "Login Microsoft 365",         type: text, indexed: true, unique: true, required: true, description: "UPN in minuscolo, es. mario.rossi@societadolce.it" }
+      - { name: Cognome,                display_name: "Cognome",                     type: text, required: true }
+      - { name: Nome,                   display_name: "Nome",                        type: text, required: true }
+      - { name: EmailAziendale,         display_name: "E-mail aziendale",            type: text }
+      - { name: EmailPersonale,         display_name: "E-mail personale",            type: text, description: "Inserita dal lavoratore al primo accesso: riceve qui le notifiche" }
+      - { name: CodiceFiscale,          display_name: "Codice fiscale",              type: text, max_length: 16 }
+      - { name: CFMascherato,           display_name: "Codice fiscale (mascherato)", type: text, max_length: 16 }
+      - { name: CFRegistrato,           display_name: "Codice fiscale registrato",   type: bool }
+      - { name: StrutturaRif,           display_name: "ID struttura",                type: int }
+      - { name: Area,                   display_name: "Area",                        type: choice, choice: area }
+      - { name: Servizio,               display_name: "Servizio",                    type: text }
+      - { name: CentroDiCosto,          display_name: "Centro di costo",             type: text, indexed: true }
+      - { name: Coordinatore,           display_name: "Coordinatore assegnato",      type: user }
+      - { name: CoordinatoreLogin,      display_name: "Login coordinatore",          type: text, indexed: true }
+      - { name: CoordinatoreNome,       display_name: "Nome coordinatore",           type: text }
+      - { name: CoordinatoreEmail,      display_name: "E-mail coordinatore",         type: text }
+      - { name: StatoLavoratore,        display_name: "Stato lavoratore",            type: choice, choice: stato_lavoratore, default: "Attivo", indexed: true }
+      - { name: InizioAssegnazione,     display_name: "Data inizio validità assegnazione", type: date }
+      - { name: FineAssegnazione,       display_name: "Data fine validità assegnazione",   type: date }
+      - { name: SegnalazioneVariazione, display_name: "Segnalazione variazione dati", type: note }
+      - { name: SegnalazioneAperta,     display_name: "Segnalazione da gestire",     type: bool, indexed: true }
+    views:
+      - { name: "Tutti i lavoratori", default: true, fields: [LinkTitle, Login, Servizio, CentroDiCosto, CoordinatoreNome, StatoLavoratore, CFRegistrato], order_by: Title, ascending: true }
+
+  # ===========================================================================
+  StruttureOrganizzative:
+    title: "Strutture organizzative"
+    template: 100
+    description: "Organigramma: un elemento per servizio / centro di costo."
+    permissions: inherit
+    title_display: "Servizio"
+    versioning: true
+    columns:
+      - { name: Area,                       display_name: "Area",                     type: choice, choice: area, required: true }
+      - { name: CentroDiCosto,              display_name: "Centro di costo",          type: text, required: true, indexed: true }
+      - { name: CoordinatoreResponsabile,   display_name: "Coordinatore responsabile", type: user }
+      - { name: CoordinatoreServizio,       display_name: "Coordinatore servizio",    type: user }
+      - { name: CoordinatoreServizioLogin,  display_name: "Login coordinatore servizio", type: text }
+      - { name: EmailCoordinatoreServizio,  display_name: "E-mail coordinatore servizio", type: text }
+      - { name: DataInizioValidita,         display_name: "Data inizio validità",     type: date }
+      - { name: DataFineValidita,           display_name: "Data fine validità",       type: date }
+      - { name: Attiva,                     display_name: "Struttura attiva",         type: bool, default: true }
+    views:
+      - { name: "Tutte le strutture", default: true, fields: [LinkTitle, Area, CentroDiCosto, CoordinatoreServizio, Attiva], order_by: Title, ascending: true }
+
+  # ===========================================================================
+  CatalogoCorsi:
+    title: "Catalogo corsi"
+    template: 100
+    description: "Catalogo dei corsi aziendali e corsi esterni inseriti dai lavoratori. Leggibile da tutti gli utenti dell'app."
+    permissions:
+      break: { copy: true, add: [ { principal: everyone, role: Reader } ] }
+    title_display: "Titolo corso"
+    versioning: true
+    columns:
+      - { name: CodiceCorso,       display_name: "Codice univoco corso",   type: text, indexed: true, description: "Interni: codice HR. Esterni: EXT-<ID> generato dal flusso" }
+      - { name: Descrizione,       display_name: "Descrizione",            type: note }
+      - { name: EnteErogatore,     display_name: "Ente erogatore",         type: choice, choice: ente_erogatore, required: true, indexed: true }
+      - { name: NomeEnte,          display_name: "Nome ente erogatore",    type: text }
+      - { name: Tipologia,         display_name: "Tipologia",              type: text }
+      - { name: Modalita,          display_name: "Modalità di svolgimento", type: choice, choice: modalita }
+      - { name: DurataCorso,       display_name: "Durata corso",           type: number, description: "Ore" }
+      - { name: GettonePrevisto,   display_name: "Gettone previsto",       type: bool }
+      - { name: CorsoAttivo,       display_name: "Corso attivo",           type: bool, default: true, indexed: true }
+      - { name: PiuGiornate,       display_name: "Più giornate formative", type: bool }
+      - { name: Origine,           display_name: "Origine",                type: choice, choice: origine_corso, default: "Catalogo aziendale" }
+      - { name: StatoValidazione,  display_name: "Stato validazione",      type: choice, choice: stato_validazione_corso, default: "Validato", indexed: true }
+      - { name: LoginAutore,       display_name: "Login autore",           type: text, indexed: true, description: "Corsi esterni: lavoratore che li ha inseriti (storico personale)" }
+    views:
+      - { name: "Tutti i corsi", default: true, fields: [LinkTitle, CodiceCorso, EnteErogatore, Modalita, DurataCorso, GettonePrevisto, CorsoAttivo, StatoValidazione], order_by: Title, ascending: true }
+
+  # ===========================================================================
+  ChiusureMensili:
+    title: "Chiusure mensili"
+    template: 100
+    description: "Stato dei periodi mensili e file paghe generati. Leggibile da tutti gli utenti dell'app (per bloccare i mesi chiusi)."
+    permissions:
+      break: { copy: true, add: [ { principal: everyone, role: Reader } ] }
+    title_display: "Periodo"
+    versioning: true
+    columns:
+      - { name: Mese,                   display_name: "Mese",                       type: int, required: true }
+      - { name: Anno,                   display_name: "Anno",                       type: int, required: true, indexed: true }
+      - { name: StatoPeriodo,           display_name: "Stato del periodo",          type: choice, choice: stato_periodo, default: "Aperto" }
+      - { name: DataChiusura,           display_name: "Data chiusura",              type: datetime }
+      - { name: UtenteChiusura,         display_name: "Utente chiusura",            type: text }
+      - { name: NumeroRichieste,        display_name: "Numero richieste incluse",   type: int }
+      - { name: TotaleOreRiconosciute,  display_name: "Totale ore riconosciute",    type: number }
+      - { name: TotaleGettoni,          display_name: "Totale gettoni",             type: number }
+      - { name: FilePagheGenerato,      display_name: "File paghe generato",        type: bool }
+      - { name: FilePagheUrl,           display_name: "File paghe",                 type: url }
+      - { name: VersioneFile,           display_name: "Versione file paghe",        type: int }
+      - { name: NoteHR,                 display_name: "Note HR",                    type: note }
+      - { name: DataRiapertura,         display_name: "Data riapertura",            type: datetime }
+      - { name: UtenteRiapertura,       display_name: "Utente riapertura",          type: text }
+      - { name: MotivoRiapertura,       display_name: "Motivo riapertura",          type: note }
+    views:
+      - { name: "Tutti i periodi", default: true, fields: [LinkTitle, StatoPeriodo, DataChiusura, NumeroRichieste, TotaleOreRiconosciute, TotaleGettoni, FilePagheGenerato], order_by: Title, ascending: false }
+
+  # ===========================================================================
+  RegistroModifiche:
+    title: "Registro modifiche"
+    template: 100
+    description: "Storico delle azioni di lavoratori, coordinatori, HR, amministratori e flussi."
+    permissions: inherit
+    title_display: "Azione"
+    versioning: false
+    columns:
+      - { name: RichiestaRif,      display_name: "ID elemento richiesta", type: int, indexed: true }
+      - { name: IdRichiesta,       display_name: "ID richiesta",          type: text }
+      - { name: Tabella,           display_name: "Lista",                 type: text }
+      - { name: IdRecord,          display_name: "ID elemento",           type: text }
+      - { name: Campo,             display_name: "Campo",                 type: text }
+      - { name: ValorePrecedente,  display_name: "Valore precedente",     type: note }
+      - { name: ValoreNuovo,       display_name: "Valore nuovo",          type: note }
+      - { name: Ruolo,             display_name: "Ruolo",                 type: choice, choice: ruolo_registro }
+      - { name: LoginAutore,       display_name: "Login autore",          type: text, indexed: true }
+      - { name: Nota,              display_name: "Nota",                  type: note }
+    views:
+      - { name: "Tutte le azioni", default: true, fields: [LinkTitle, IdRichiesta, Campo, ValorePrecedente, ValoreNuovo, Ruolo, LoginAutore, Created], order_by: Created, ascending: false }
+
+  # ===========================================================================
+  RuoliApplicativi:
+    title: "Ruoli applicativi"
+    template: 100
+    description: "Utenti con ruolo Formazione HR o Amministratore. Il flusso F9 allinea i gruppi SharePoint."
+    permissions: inherit
+    title_display: "Login"
+    versioning: true
+    columns:
+      - { name: Utente,   display_name: "Utente",   type: user }
+      - { name: Ruolo,    display_name: "Ruolo",    type: choice, choice: ruolo_applicativo, required: true }
+      - { name: Attivo,   display_name: "Attivo",   type: bool, default: true }
+      - { name: NoteRuolo, display_name: "Note", type: note }
+    views:
+      - { name: "Tutti i ruoli", default: true, fields: [LinkTitle, Utente, Ruolo, Attivo], order_by: Title, ascending: true }
+
+  # ===========================================================================
+  Configurazione:
+    title: "Configurazione"
+    template: 100
+    description: "Parametri letti dai flussi (chiave/valore)."
+    permissions: inherit
+    title_display: "Chiave"
+    versioning: true
+    columns:
+      - { name: Valore,       display_name: "Valore",       type: note }
+      - { name: Descrizione,  display_name: "Descrizione",  type: note }
+    views:
+      - { name: "Tutti i parametri", default: true, fields: [LinkTitle, Valore, Descrizione], order_by: Title, ascending: true }
+    rows:
+      - { Title: "AppUrl",             Valore: "https://apps.powerapps.com/play/e/<ID-AMBIENTE>/a/<ID-APP>?tenantId=<ID-TENANT>", Descrizione: "Collegamento web dell'app: i flussi aggiungono &richiesta=<ID> per aprire direttamente una richiesta" }
+      - { Title: "EmailHR",            Valore: "formazione@societadolce.it", Descrizione: "Casella dell'Ufficio HR/Formazione che riceve segnalazioni e riepiloghi" }
+      - { Title: "MittenteEmail",      Valore: "", Descrizione: "Facoltativo: cassetta condivisa da cui inviare le e-mail (l'account di servizio deve avere il permesso Invia come). Vuoto = account di servizio" }
+      - { Title: "DestinatariPayroll", Valore: "paghe@societadolce.it;formazione@societadolce.it", Descrizione: "Destinatari del collegamento al file paghe, separati da punto e virgola" }
+      - { Title: "SitoUrl",            Valore: "https://societadolce.sharepoint.com/sites/GestioneFormazione", Descrizione: "URL di questo sito" }
+      - { Title: "AccountServizio",    Valore: "svc-formazione@societadolce.it", Descrizione: "Account di servizio dei flussi: non viene mai tolto dai gruppi dal flusso F9" }
+      - { Title: "LinkResetPassword",  Valore: "https://password.societadolce.it/", Descrizione: "Pagina di reimpostazione della password" }
+      - { Title: "Festivita",          Valore: '["2026-01-01","2026-01-06","2026-04-06","2026-04-25","2026-05-01","2026-06-02","2026-08-15","2026-11-01","2026-12-08","2026-12-25","2026-12-26","2027-01-01","2027-01-06","2027-03-29","2027-04-25","2027-05-01","2027-06-02","2027-08-15","2027-11-01","2027-12-08","2027-12-25","2027-12-26"]', Descrizione: "Giorni festivi (AAAA-MM-GG) esclusi dal conteggio dei giorni lavorativi. Aggiungere il patrono locale e aggiornare ogni anno" }
+
+  # ===========================================================================
+  AllegatiFormazione:
+    title: "Allegati formazione"
+    template: 101
+    description: "Attestati e documenti delle richieste. Una cartella per coordinatore, condivisa in sola lettura con il coordinatore dal flusso API03."
+    permissions: inherit
+    versioning: true
+    columns:
+      - { name: RichiestaRif,     display_name: "ID elemento richiesta", type: int, indexed: true }
+      - { name: IdRichiesta,      display_name: "ID richiesta",          type: text }
+      - { name: TipoAllegato,     display_name: "Tipo allegato",         type: choice, choice: tipo_allegato }
+      - { name: LavoratoreLogin,  display_name: "Login lavoratore",      type: text, indexed: true }
+
+  # ===========================================================================
+  FilePaghe:
+    title: "File paghe"
+    template: 101
+    description: "File CSV mensili per l'Ufficio Paghe."
+    permissions:
+      break: { copy: false, add: [ { principal: owners, role: Administrator }, { principal: "Formazione - HR", role: Reader }, { principal: "Formazione - Paghe", role: Reader } ] }
+    versioning: true
+    columns:
+      - { name: Periodo,          display_name: "Periodo",               type: text, max_length: 7, indexed: true }
+      - { name: NumeroRichieste,  display_name: "Numero richieste",      type: int }

@@ -1,115 +1,96 @@
 # 3. Sicurezza e protezione dei dati
 
-La sicurezza è applicata **in Dataverse**, non solo nell'app: anche chi accede ai dati con altri strumenti (Excel, API, altre app) vede e modifica solo ciò che il suo ruolo consente. L'app nasconde in più pulsanti e schermate non pertinenti, ma non è l'unica barriera.
+## 3.1 Principio di funzionamento
 
-## 3.1 Livelli di protezione
+SharePoint non permette di dire "questo utente vede solo le righe che lo riguardano" in modo semplice e scalabile. Per questo la soluzione adotta un modello **a sportello**:
 
-| Livello | Misura | Come si configura |
-|---|---|---|
-| Identità | Accesso solo con account Microsoft 365 / Entra ID (SSO), con MFA e accesso condizionale secondo le policy aziendali | Entra ID (IT) |
-| Ambiente | L'ambiente Power Platform è limitato a un **gruppo di sicurezza** (es. `GRP-Formazione-Utenti`): gli altri utenti del tenant non vi accedono | Interfaccia di amministrazione di Power Platform → Ambiente → Modifica → Gruppo di sicurezza |
-| Ruoli | Ruoli `SDF - Lavoratore`, `SDF - Formazione HR`, `SDF - Amministratore`, più il ruolo standard *Basic User* | `provision.py` (passo `roles`) |
-| Righe | Proprietà del record e condivisione automatica da parte dei flussi | Ruoli + flussi F1 e F7 |
-| Colonne | Profili di sicurezza delle colonne per esiti, ore definitive e codice fiscale | `provision.py` (passo `colsec`) |
-| Allegati | Colonne *File* sulla richiesta: stessa visibilità del record | Modello dati |
-| Integrità | I flussi F2 e F3 annullano le transizioni non autorizzate e avvisano HR; audit Dataverse; *Registro modifiche* | Flussi + audit |
-| Connettori | Criterio DLP: Dataverse, Office 365 Outlook e SharePoint nel gruppo *Business*, gli altri bloccati nell'ambiente | Interfaccia di amministrazione → Criteri → Criteri dati |
+- **lavoratori e coordinatori non hanno alcun permesso** sulle liste con dati personali (*Richieste formazione*, *Lavoratori*, *Registro modifiche*);
+- tutto ciò che fanno passa dai **flussi API**, che girano con un **account di servizio** e prima di ogni operazione verificano **chi sta chiamando**. L'identità arriva dall'intestazione della chiamata Power Apps, autenticata da Microsoft 365: l'utente non può falsificarla;
+- il flusso restituisce **solo** i dati che spettano a chi chiama e applica **lato server** le regole di processo (stati, ore, mese chiuso).
 
-## 3.2 Gruppi, team e ruoli
+Anche aprendo SharePoint direttamente, un lavoratore o un coordinatore non vede le richieste altrui e non può modificare le approvazioni.
 
-Si creano in Microsoft Entra ID quattro gruppi di sicurezza. Ogni gruppo è collegato a un **team Dataverse di tipo "Gruppo Microsoft Entra"**, così chi entra o esce dal gruppo ottiene o perde i permessi in automatico.
+```mermaid
+sequenceDiagram
+  participant L as Lavoratore (app)
+  participant F as Flusso API (account di servizio)
+  participant S as SharePoint
+  L->>F: SalvaRichiesta(dati) + identità Microsoft 365
+  F->>S: chi è? (Lavoratori, Login = chiamante)
+  F->>F: controlli: proprietario, stato modificabile, ore, mese aperto
+  F->>S: scrive la richiesta e il registro
+  F-->>L: esito + messaggio
+```
 
-| Gruppo Entra (nome suggerito) | Team Dataverse | Ruoli Dataverse | Profilo colonne | Chi ne fa parte |
+## 3.2 Livelli di protezione
+
+| Livello | Misura |
+|---|---|
+| Identità | Accesso con account Microsoft 365 (SSO), con MFA e accesso condizionale secondo le policy aziendali |
+| Sito | Sito del team **senza gruppo Microsoft 365** e non collegato alla intranet: nessuno vi accede se non è tra i Proprietari o nei gruppi della soluzione. Liste escluse dalla ricerca (`NoCrawl`) |
+| Permessi | Proprietari (amministratori + account di servizio), gruppo *Formazione - HR* (lettura; modifica di *Lavoratori*), gruppo *Formazione - Paghe* (solo *File paghe*), "Tutti tranne gli utenti esterni" (solo *Catalogo corsi* e *Chiusure mensili*, dati non personali) |
+| Logica | Flussi API con verifica del chiamante e delle regole (stati, ore, mese chiuso, coordinatore ≠ lavoratore) |
+| Allegati | Raccolta *Allegati formazione* con **una cartella per coordinatore**, condivisa in sola lettura solo con lui; HR legge tutto; i lavoratori caricano tramite flusso |
+| Tracciabilità | *Registro modifiche* (chi, quando, ruolo, valori prima/dopo) + **controllo versioni** di SharePoint su tutte le liste + registro di controllo di Microsoft 365 (Purview) |
+| Connettori | Solo connettori standard. Consigliato un criterio DLP sull'ambiente predefinito che tenga SharePoint, Office 365 Outlook e Office 365 Users nello stesso gruppo |
+
+## 3.3 Matrice dei permessi
+
+| Dato | Lavoratore | Coordinatore | Formazione HR | Amministratore |
 |---|---|---|---|---|
-| `GRP-Formazione-Lavoratori` | SDF Lavoratori | SDF - Lavoratore | SDF - Lettura esiti | tutti gli utenti dell'app |
-| `GRP-Formazione-Coordinatori` | SDF Coordinatori | SDF - Lavoratore | SDF - Coordinatori | i coordinatori |
-| `GRP-Formazione-HR` | SDF Formazione HR | SDF - Formazione HR | SDF - Formazione HR | Ufficio HR/Formazione |
-| `GRP-Formazione-Admin` | SDF Amministratori | SDF - Amministratore + SDF - Formazione HR | SDF - Formazione HR | amministratori applicativi |
+| Proprie richieste | lettura e scrittura **tramite flusso**, solo negli stati consentiti | — | — | — |
+| Richieste del team | — | lettura tramite flusso; approva, respinge o chiede integrazione tramite flusso | — | — |
+| Tutte le richieste | — | — | lettura diretta; validazioni tramite flusso | come HR |
+| Proprio profilo (e-mail personale, CF) | lettura del CF **mascherato**; aggiornamento tramite flusso | — | lettura e modifica (CF in chiaro) | lettura e modifica |
+| Anagrafica, organigramma, ruoli, configurazione | — | — | lettura (anagrafica: modifica) | modifica |
+| Catalogo corsi, stato dei mesi | lettura | lettura | lettura | modifica |
+| Attestati | caricamento | lettura della propria cartella | lettura | completo |
+| File paghe | — | — | lettura | completo |
 
-A tutti gli utenti va assegnato anche il ruolo standard **Basic User** (Utente di base), di norma assegnandolo al team `SDF Lavoratori`.
+## 3.4 Ruoli: chi li assegna
 
-Se in `config.json` si indicano gli Object ID dei gruppi, `provision.py` crea i team e assegna ruoli e profili. Altrimenti si procede a mano: *Impostazioni → Utenti e autorizzazioni → Team → Nuovo team → Tipo: Gruppo di sicurezza Microsoft Entra*, poi *Gestisci ruoli di sicurezza*, quindi *Sicurezza → Profili di sicurezza delle colonne → (profilo) → Team → Aggiungi*.
-
-### Matrice dei permessi
-
-| Tabella | Lavoratore | Coordinatore | Formazione HR | Amministratore |
-|---|---|---|---|---|
-| Richieste formazione | crea; legge e modifica **solo le proprie** | in più: legge e modifica quelle **condivise da F1** (il suo team) | legge e modifica **tutte** | tutte (senza eliminazione) |
-| Lavoratori | legge **solo il proprio** record (condiviso da F7) | in più: legge quelli del team (condivisi da F7) | legge e modifica tutti | gestione completa |
-| Catalogo corsi | legge tutto; crea corsi esterni | come lavoratore | gestione | gestione completa |
-| Strutture organizzative | lettura | lettura | lettura | gestione completa |
-| Chiusure mensili | lettura | lettura | crea e modifica | crea e modifica (riapertura) |
-| Registro modifiche | crea; legge i propri | crea; legge quelli delle richieste del team | crea; legge tutto | crea; legge tutto |
-
-Nessun ruolo applicativo può **eliminare** richieste o righe del registro: lo storico non si cancella.
-
-## 3.3 Sicurezza a livello di riga
-
-- **Richieste.** Il proprietario è il lavoratore che crea la richiesta. Quando la richiesta viene inviata, il flusso **F1** la condivide (Lettura, Scrittura, Aggiungi, Aggiungi a) con il coordinatore assegnato. Se l'amministratore cambia il coordinatore di un lavoratore, il flusso **F7** condivide con il nuovo coordinatore le richieste ancora aperte.
-- **Lavoratori.** Sono di proprietà dell'amministratore o del team. F7 li condivide in sola lettura con il lavoratore e con il suo coordinatore. Il lavoratore **non può modificare** la propria anagrafica né il proprio coordinatore: i dati personali (e-mail di contatto, CF) e le segnalazioni di variazione passano dal flusso **F8**, che verifica l'identità di chi chiama.
-- **Registro modifiche.** La relazione con la richiesta è di tipo *padre-figlio*: chi ha accesso alla richiesta vede anche il suo storico.
-
-## 3.4 Sicurezza a livello di colonna
-
-| Colonne protette | Lettura | Scrittura |
+| Ruolo | Dove si assegna | Effetto |
 |---|---|---|
-| Ore retribuite/gettone riconosciute dal coordinatore, Note del coordinatore, Data approvazione coordinatore | tutti gli utenti dell'app | coordinatori, HR, amministratori |
-| Ore retribuite/gettone approvate HR, Note HR, Data validazione HR | tutti gli utenti dell'app | HR, amministratori |
-| **Codice fiscale** (tabella Lavoratori) | HR, amministratori, account di servizio | HR, amministratori, account di servizio (flusso F8) |
+| Lavoratore | lista *Lavoratori* (Stato = Attivo) | può usare l'app per le proprie richieste |
+| Coordinatore | lista *Lavoratori*, colonna *Coordinatore assegnato* | riceve le richieste dei lavoratori assegnati e accede alla propria cartella allegati |
+| Formazione HR | lista *Ruoli applicativi* (dall'app, schermata Amministrazione) | il flusso F9 lo aggiunge al gruppo *Formazione - HR* |
+| Amministratore | lista *Ruoli applicativi* | il flusso F9 lo aggiunge ai Proprietari del sito |
 
-L'app mostra al lavoratore solo il **CF mascherato** (es. `RSS**********X1`). Il CF in chiaro compare solo nel file paghe generato dal flusso F6.
+Il **primo** amministratore e l'account di servizio vengono inseriti dallo script di installazione.
 
-## 3.5 Account di servizio dei flussi
+## 3.5 Account di servizio
 
 Le connessioni dei flussi vanno create con un account dedicato, ad esempio `svc-formazione@societadolce.it`:
 
-- licenza Power Automate / Power Apps adeguata e cassetta postale (oppure permesso *Invia come* su una cassetta condivisa, es. `formazione@societadolce.it`);
-- ruolo **System Administrator** nell'ambiente: serve per condividere i record e scrivere la colonna protetta del CF;
-- accesso in scrittura alla cartella SharePoint del file paghe;
-- MFA o criteri di accesso condizionale come previsto per gli account di servizio aziendali; password e credenziali gestite dall'IT.
+- con una licenza Microsoft 365 che includa la **cassetta postale** (per inviare le e-mail), oppure con il permesso *Invia come* su una cassetta condivisa (es. `formazione@societadolce.it`, da indicare in *Configurazione → MittenteEmail*);
+- **Proprietario** del sito Gestione ore formazione;
+- password robusta e MFA o criteri di accesso condizionale come previsto per gli account di servizio; credenziali custodite dall'IT;
+- non va usato per altro.
 
-## 3.6 Integrità del processo e rafforzamenti opzionali
+Se l'account viene disattivato o cambia password senza MFA compatibile, i flussi si fermano: va monitorato (Power Automate avvisa il proprietario in caso di errori ripetuti).
 
-Il lavoratore deve poter scrivere sulla propria richiesta (bozze, integrazioni). Dataverse da solo non può quindi impedirgli, ad esempio via API, di impostare uno stato non consentito. Le contromisure previste sono:
-
-1. **colonne protette:** il lavoratore non può scrivere ore riconosciute né note di coordinatore e HR;
-2. **controllo dei flussi:** F2 verifica che l'approvazione arrivi dal coordinatore assegnato e non dal proprietario (un coordinatore non può approvare le proprie richieste). F3 verifica le transizioni HR. In caso di anomalia lo stato viene ripristinato e HR riceve un'e-mail;
-3. **audit Dataverse:** registra chi ha modificato cosa e quando, anche fuori dall'app.
-
-Per un **blocco preventivo** lato server, cioè per rifiutare la modifica invece di correggerla dopo, si può aggiungere un **plug-in Dataverse** (C#) registrato su *Update* di `sdf_richiestaformazione` in fase *PreOperation*. Il plug-in verifica:
-- che la transizione di stato sia ammessa per il ruolo dell'utente (vedi la tabella in [01-architettura.md §1.3](01-architettura.md#13-ciclo-di-vita-della-richiesta-macchina-a-stati));
-- che non si modifichino richieste *Validata da HR* o successive;
-- che non si modifichino richieste di un periodo con *Chiusura mensile* = Chiuso, salvo per gli amministratori.
-
-È consigliato se l'app viene estesa ad altri canali o se l'audit interno lo richiede.
-
-## 3.7 Audit
-
-1. Interfaccia di amministrazione di Power Platform → Ambiente → **Impostazioni → Audit e log** → attivare *Avvia controllo*, *Registra accesso* e impostare il periodo di conservazione.
-2. Le tabelle della soluzione hanno già il controllo attivo (`IsAuditEnabled`), impostato da `provision.py`.
-3. La cronologia è consultabile da un'app basata su modello o con *Cronologia controllo*. Lo storico **leggibile nell'app** è la tabella *Registro modifiche*, scritta dall'app e dai flussi a ogni azione di lavoratore, coordinatore, HR, amministratore e sistema.
-
-## 3.8 Protezione dei dati personali (GDPR)
-
-Elementi da condividere con il **DPO** e l'Ufficio Privacy di Società Dolce prima dell'avvio:
+## 3.6 Dati personali (GDPR)
 
 | Tema | Indicazione |
 |---|---|
-| Finalità | Gestione e rendicontazione delle ore di formazione; riconoscimento economico (retribuzione / gettone) tramite l'Ufficio Paghe; adempimenti sulla formazione obbligatoria |
-| Base giuridica | Esecuzione del contratto di lavoro e obblighi di legge (art. 6.1 b, c GDPR), da confermare con il DPO |
-| Informativa | Aggiornare l'informativa ai lavoratori (art. 13) indicando il nuovo strumento; l'app può riportarla nella schermata di benvenuto |
-| Registro dei trattamenti | Aggiornare il registro (art. 30) con il nuovo trattamento e i responsabili (Microsoft come responsabile del trattamento ai sensi del DPA) |
-| Minimizzazione | Sulle richieste non c'è il CF; i coordinatori non vedono il CF; gli allegati sono visibili solo a chi vede la richiesta |
-| Localizzazione | Creare l'ambiente nell'area geografica **Europa** |
-| Conservazione | Definire i tempi di conservazione di richieste, allegati e file paghe (es. allineati alla documentazione paghe), poi pianificare la cancellazione o l'archiviazione, ad esempio con un flusso annuale o le regole di conservazione dei dati a lungo termine di Dataverse |
-| Diritti degli interessati | HR può estrarre tutte le richieste di un lavoratore (filtro per lavoratore nel riepilogo) |
-| Controllo a distanza | L'app registra le azioni di processo (invii, approvazioni), non monitora l'attività lavorativa. Verificare con il DPO e le relazioni sindacali gli aspetti dell'art. 4 L. 300/1970 |
-| Sicurezza del file paghe | Cartella SharePoint con permessi limitati a HR e Paghe; il collegamento inviato per e-mail funziona solo per gli utenti autorizzati |
+| Dati trattati | Nome, cognome, login, e-mail personale, codice fiscale, servizio e centro di costo, corsi frequentati, orari, ore, attestati |
+| Finalità | Gestione e rendicontazione delle ore di formazione; riconoscimento economico tramite l'Ufficio Paghe; adempimenti sulla formazione obbligatoria |
+| Base giuridica | Esecuzione del contratto di lavoro e obblighi di legge (art. 6.1 b, c GDPR): da confermare con il DPO |
+| E-mail personale | Serve **solo** per le notifiche dell'app ai lavoratori senza casella aziendale. Indicarlo nell'informativa; il lavoratore può modificarla dal proprio profilo |
+| Minimizzazione | Il CF non compare nelle richieste né nelle e-mail. È visibile in chiaro solo a HR e amministratori e nel file paghe. Il lavoratore vede la versione mascherata. Il registro non ne conserva il valore |
+| Informativa | Aggiornare l'informativa ai dipendenti (art. 13) citando il nuovo strumento e l'uso dell'e-mail personale |
+| Registro dei trattamenti | Aggiornare il registro (art. 30). Microsoft opera come responsabile del trattamento secondo il DPA dei servizi online; i dati restano nel tenant Microsoft 365 di Società Dolce (area UE se il tenant è in UE) |
+| Conservazione | Definire i tempi per richieste, attestati e file paghe (es. allineati alla documentazione paghe) e pianificare cancellazione o archiviazione, ad esempio con i criteri di conservazione di Microsoft Purview sul sito |
+| Diritti degli interessati | HR può estrarre tutte le richieste di un lavoratore (filtro per login nella lista o nel riepilogo) |
+| Controllo a distanza | L'app registra azioni di processo (invii, approvazioni), non l'attività lavorativa. Verificare con il DPO e le relazioni sindacali gli aspetti dell'art. 4 L. 300/1970 |
+| E-mail verso indirizzi esterni | Le notifiche ai lavoratori contengono solo il minimo (corso, data, ore, stato, link all'app) e nessun dato fiscale. I dettagli si vedono solo nell'app, dopo l'accesso |
 
-## 3.9 Rischi residui noti
+## 3.7 Rischi residui noti
 
 | Rischio | Mitigazione |
 |---|---|
-| Un coordinatore che è anche lavoratore potrebbe scrivere le colonne del coordinatore sulle **proprie** richieste via API | F2 annulla l'approvazione e avvisa HR; plug-in opzionale (§3.6) |
-| Cambiato il coordinatore, il precedente conserva l'accesso in lettura alle richieste già condivise | Le richieste restano consultabili dal precedente coordinatore. Se non è accettabile, aggiungere a F7 la revoca (`RevokeAccess`) |
-| Volumi sopra le 2.000 richieste per filtro nel riepilogo dell'app | Filtrare per periodo/perimetro; per analisi massive usare Power BI sulle stesse tabelle (rispetta la sicurezza di Dataverse) |
+| Proprietari del sito e HR (sulla lista Lavoratori) possono modificare i dati direttamente in SharePoint, fuori dalle regole dell'app | Sono utenti di fiducia, in numero ridotto; il controllo versioni e il registro di controllo di Microsoft 365 tracciano ogni modifica |
+| Gli allegati delle bozze sono già nella cartella del coordinatore | Se non è accettabile, si può modificare API03 per spostarli al momento dell'invio |
+| Se l'amministratore cambia coordinatore, il precedente conserva la lettura degli allegati già caricati nella sua cartella per le richieste chiuse | F7 sposta gli allegati delle richieste aperte; quelli storici restano consultabili dal coordinatore che li ha gestiti |
+| Account di servizio con privilegi elevati sul sito | Account dedicato, MFA o accesso condizionale, nessun altro uso, revisione periodica |
+| Chi conosce l'URL di un file allegato non lo apre se non ha permessi | — (SharePoint verifica sempre i permessi) |

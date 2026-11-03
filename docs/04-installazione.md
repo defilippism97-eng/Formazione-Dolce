@@ -1,129 +1,128 @@
 # 4. Guida all'installazione
 
-Tempo stimato: **mezza giornata** per un ambiente di test, se gruppi e licenze sono già pronti.
-Ruoli necessari: amministratore Power Platform (ambiente), amministratore Entra ID (gruppi), referente HR (dati iniziali).
+**Costo:** nessuna licenza aggiuntiva. Si usano SharePoint, Power Apps e Power Automate già inclusi in Microsoft 365, solo con connettori standard.
+**Tempo stimato:** 1 giorno per un ambiente di prova, con il supporto dell'IT per i passaggi da amministratore.
+
+| Chi | Cosa |
+|---|---|
+| IT / amministratore Microsoft 365 | account di servizio, registrazione app PnP, creazione del sito |
+| Amministratore applicativo | script di installazione, importazione dei flussi, creazione dell'app |
+| HR | dati iniziali (organigramma, catalogo, lavoratori), collaudo |
 
 ## 4.0 Prerequisiti
 
-### Licenze (da verificare prima di partire)
-Un'app Canvas che usa **Dataverse** è un'app *premium*: **ogni utente** che la apre deve essere coperto da una di queste opzioni:
+1. **Licenze.** Gli utenti devono avere una licenza Microsoft 365 che includa SharePoint e Power Apps / Power Automate *per Microsoft 365*: la includono quasi tutte, comprese le licenze frontline F1/F3, Business ed E1/E3/E5. Per verificarla: *Interfaccia di amministrazione di Microsoft 365 → Utenti → (utente) → Licenze e app*. L'account di servizio ha bisogno di una licenza con **cassetta postale** (per inviare le e-mail).
+2. **Account di servizio** `svc-formazione@societadolce.it`, vedi [03-sicurezza.md §3.5](03-sicurezza.md#35-account-di-servizio).
+3. **Facoltativo:** una cassetta condivisa `formazione@societadolce.it` come mittente delle e-mail, con permesso *Invia come* per l'account di servizio.
+4. Sul PC di chi installa:
+   - [PowerShell 7](https://aka.ms/powershell) e il modulo PnP:
+     ```powershell
+     Install-Module PnP.PowerShell -Scope CurrentUser
+     ```
+   - una **registrazione app Entra ID per PnP** (una sola volta, la crea un amministratore):
+     ```powershell
+     Register-PnPEntraIDAppForInteractiveLogin -ApplicationName "PnP Societa Dolce" -Tenant societadolce.onmicrosoft.com -Interactive
+     ```
+     Annotare il **Client ID** restituito.
+   - Python 3.10+ (solo se l'indirizzo del sito è diverso da `/sites/GestioneFormazione`, vedi 4.3).
 
-| Opzione | Quando conviene |
-|---|---|
-| **Pagamento a consumo** (Pay-as-you-go, ambiente collegato a una sottoscrizione Azure) | Molti lavoratori che usano l'app poche volte al mese: si paga solo per gli **utenti attivi nel mese** |
-| Power Apps **per app** | Numero stabile di utenti che usano solo questa app |
-| Power Apps **Premium** (per utente) | Utenti che usano molte app premium (es. HR, coordinatori) |
+## 4.1 Preparare i dati (consigliato prima dell'installazione)
 
-Con migliaia di lavoratori la licenza pesa sul progetto: chiedete al vostro partner Microsoft i **prezzi correnti** e valutate il pagamento a consumo per i lavoratori, con licenze dedicate per HR e coordinatori. L'account di servizio dei flussi richiede una licenza premium (o Power Automate Process).
+Preparare tre file CSV con separatore `;`, codifica UTF-8 e la prima riga uguale ai modelli in `sharepoint/seed/`:
 
-### Altro
-- Tenant Microsoft 365 con gli utenti dei lavoratori. Chi non ha la casella di posta riceve le notifiche all'*e-mail di contatto* inserita al primo accesso.
-- Un sito SharePoint HR con una cartella per i file paghe, es. `Documenti condivisi/Formazione/Payroll`.
-- Per lo script: Python 3.10+ e Azure CLI (`az login`), oppure il pacchetto `msal`.
+| File | Modello | Contenuto |
+|---|---|---|
+| strutture.csv | `sharepoint/seed/strutture.csv` | Area · Servizio · Centro di costo · Login coordinatore servizio |
+| corsi.csv | `sharepoint/seed/corsi.csv` | Corsi *Datore di lavoro* del catalogo: codice, titolo, modalità, durata, gettone previsto, ecc. |
+| lavoratori.csv | `sharepoint/seed/lavoratori_modello.csv` | Login Microsoft 365 · Cognome · Nome · E-mail aziendale (se esiste) · Centro di costo · Login coordinatore · Stato · Date di validità |
 
-## 4.1 Creare l'ambiente
+L'area deve essere esattamente una di: *Area Nord Ovest, Area Centro, Area Educativa, Area Socio Sanitaria, Area Staff*. Se il *Login coordinatore* di un lavoratore è vuoto, viene preso quello della sua struttura.
 
-1. [Interfaccia di amministrazione di Power Platform](https://admin.powerplatform.microsoft.com) → **Ambienti → Nuovo**:
-   - Tipo: *Sandbox* per collaudo, *Produzione* per l'esercizio
-   - Area: **Europa**
-   - Aggiungi Dataverse: **Sì**, lingua **Italiano**, valuta **EUR**
-   - Gruppo di sicurezza: `GRP-Formazione-Lavoratori` (vedi 4.2)
-2. Ambiente → **Impostazioni → Audit e log → Impostazioni di controllo**: attivare *Avvia controllo* e *Registra accesso*.
-3. **Criteri dati (DLP)**: mettere Microsoft Dataverse, Office 365 Outlook, SharePoint e Office 365 Users nel gruppo *Business* per questo ambiente.
+## 4.2 Creare il sito e le liste
 
-## 4.2 Gruppi Microsoft Entra ID e account di servizio
+Da PowerShell 7, nella cartella `sharepoint` del progetto:
 
-1. Creare i 4 gruppi di sicurezza descritti in [03-sicurezza.md §3.2](03-sicurezza.md#32-gruppi-team-e-ruoli) e annotare gli **Object ID**.
-2. Creare l'account `svc-formazione@…` (vedi [§3.5](03-sicurezza.md#35-account-di-servizio-dei-flussi)), aggiungerlo all'ambiente con il ruolo *System Administrator* e dargli accesso in scrittura alla cartella SharePoint dei file paghe.
-
-## 4.3 Creare tabelle, sicurezza e flussi con lo script
-
-```bash
-cd Formazione-Dolce
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r dataverse/requirements.txt
-cp dataverse/config.example.json dataverse/config.json
+```powershell
+./Installa-GestioneFormazione.ps1 `
+    -SitoUrl https://societadolce.sharepoint.com/sites/GestioneFormazione `
+    -ClientId <Client ID PnP> `
+    -CreaSito -Proprietario <amministratore>@societadolce.it `
+    -AccountServizio svc-formazione@societadolce.it `
+    -Amministratori <amministratore app>@societadolce.it `
+    -UtentiHR <hr1>@societadolce.it,<hr2>@societadolce.it `
+    -UtentiPaghe <paghe>@societadolce.it `
+    -EmailHR formazione@societadolce.it `
+    -DestinatariPayroll "paghe@societadolce.it;formazione@societadolce.it" `
+    -ImportaStrutture ./strutture.csv -ImportaCorsi ./corsi.csv -ImportaLavoratori ./lavoratori.csv
 ```
 
-Compilare `dataverse/config.json`:
-- `environment_url`: *Interfaccia di amministrazione → Ambiente → URL ambiente* (es. `https://societadolce-formazione.crm4.dynamics.com`);
-- `tenant_id` e gli Object ID dei 4 gruppi;
-- `variabili_ambiente`: e-mail HR, destinatari del file paghe, sito e cartella SharePoint. `sdf_AppUrl` si compila dopo aver pubblicato l'app (4.5).
+- `-CreaSito` richiede un amministratore SharePoint. In alternativa il sito si crea a mano: *Interfaccia di amministrazione di SharePoint → Siti attivi → Crea → Altre opzioni → Sito del team senza gruppo*, lingua **Italiano**, fuso **Roma**. Poi si lancia lo script senza `-CreaSito`.
+- In un ambiente di prova si può usare `-DatiEsempio` al posto dei CSV.
+- Lo script si può rilanciare: salta ciò che esiste già.
 
-```bash
-az login --tenant <ID-tenant>
-python dataverse/provision.py --config dataverse/config.json --dry-run    # anteprima, non modifica nulla
-python dataverse/provision.py --config dataverse/config.json              # esecuzione
-```
+Al termine il sito contiene 8 liste, 2 raccolte, i gruppi *Formazione - HR* e *Formazione - Paghe* e i permessi descritti in [02-modello-dati.md](02-modello-dati.md).
 
-Lo script esegue in ordine: `solution, choices, tables, columns, relationships, keys, publish, envvars, connrefs, roles, colsec, teams, flows`. Si può rilanciare senza rischi: i componenti già presenti vengono saltati. Per eseguire solo alcuni passi:
+> **Importante:** importare i lavoratori **prima** di attivare il flusso F7. Altrimenti F7 partirebbe per ogni lavoratore importato.
 
-```bash
-python dataverse/provision.py --steps roles,colsec,teams
-```
+## 4.3 Importare i flussi
 
-Per caricare in un ambiente di **test** le strutture e i corsi d'esempio di `dataverse/seed/`:
+1. Se il sito ha un indirizzo **diverso** da `https://societadolce.sharepoint.com/sites/GestioneFormazione`, rigenerare i pacchetti:
+   ```bash
+   python powerautomate/crea_pacchetti.py --sito https://<tenant>.sharepoint.com/sites/<nome>
+   ```
+   Altrimenti usare quelli già pronti in `powerautomate/pacchetti/`.
+2. Accedere a [make.powerautomate.com](https://make.powerautomate.com) **con l'account di servizio**, nell'ambiente predefinito.
+3. **I miei flussi → Importa → Importa pacchetto (legacy)** → `GestioneFormazione_tutti_i_flussi.zip`, oppure un pacchetto alla volta.
+4. Per ogni riga:
+   - *Impostazione importazione* del flusso = **Crea come nuovo**;
+   - per SharePoint e Office 365 Outlook = **Seleziona durante l'importazione** → connessione dell'account di servizio (crearla se manca).
+5. **Importa**. I flussi vengono creati **spenti**.
 
-```bash
-python dataverse/provision.py --steps seed
-```
+Se l'importazione di un flusso non riesce, lo si può ricreare a mano seguendo la descrizione passo passo in [powerautomate/README.md](../powerautomate/README.md).
 
-> **Senza script.** Le tabelle si possono creare anche a mano da [make.powerapps.com](https://make.powerapps.com) → Soluzioni → *Gestione ore formazione* seguendo [02-modello-dati.md](02-modello-dati.md). Bisogna rispettare nomi logici e valori delle scelte, perché app e flussi li usano.
+## 4.4 Creare l'app
 
-## 4.4 Collegare le connessioni e verificare le variabili
-
-1. make.powerapps.com → **Soluzioni → Gestione ore formazione → Riferimenti di connessione**.
-2. Per `SDF Dataverse`, `SDF Office 365 Outlook` e `SDF SharePoint` scegliere *Modifica → Nuova connessione*, collegandosi **con l'account di servizio**.
-3. **Variabili d'ambiente**: controllare i valori (e-mail HR, destinatari paghe, sito, cartella, festività dell'anno con il **patrono locale**).
-
-## 4.5 Creare l'app Canvas
-
-Seguire [powerapps/README.md](../powerapps/README.md): creare l'app nella soluzione, aggiungere le origini dati, incollare formule e schermate, aggiungere il flusso F8, creare il modulo allegati, salvare e pubblicare.
+Seguire [powerapps/README.md](../powerapps/README.md): creare un'app Canvas vuota, collegare le liste SharePoint, aggiungere i 10 flussi `SDF_API…`, incollare formule e schermate, aggiungere i controlli allegati, salvare e **pubblicare**.
 
 Poi:
-1. Aprire i **Dettagli** dell'app e copiare il **Collegamento web** (`https://apps.powerapps.com/play/e/<ambiente>/a/<app>?tenantId=<tenant>`).
-2. Scriverlo nella variabile d'ambiente **`sdf_AppUrl`**: i flussi aggiungono `&richiesta=<ID>` per il collegamento diretto.
-3. **Condividere** l'app con i 4 gruppi Entra (*Condividi → gruppo → Utente*), lasciando i ruoli Dataverse già assegnati ai team.
+1. **Dettagli** dell'app → copiare il **Collegamento web**.
+2. Lista **Configurazione** del sito → chiave `AppUrl` → incollare il collegamento. Serve ai link diretti nelle e-mail.
+3. **Condividi** l'app con *Tutti tranne gli utenti esterni*, oppure con un gruppo che comprenda tutti i lavoratori. La condivisione dà solo la possibilità di aprire l'app: i dati restano protetti dai flussi.
+4. I flussi API, quando vengono chiamati dall'app, usano le connessioni dell'account di servizio. In *Dettagli del flusso → Utenti solo esecuzione*, lasciare per SharePoint e Outlook **"Usa questa connessione"**.
 
-## 4.6 Attivare i flussi
+## 4.5 Attivare i flussi
 
-make.powerapps.com → Soluzioni → *Gestione ore formazione* → **Flussi cloud**. Attivarli in quest'ordine:
+Ordine consigliato:
 
-1. F7 – Allinea lavoratore
-2. F8 – Aggiorna dati personali
-3. F1 – Invio al coordinatore
-4. F2 – Esito coordinatore
-5. F3 – Esito HR
-6. F6 – Esportazione Payroll
-7. F4 – Promemoria
-8. F5 – Riepilogo mensile
+1. `SDF_F9_SincronizzaRuoli` e `SDF_F9b_RuoloEliminato`
+2. `SDF_F7_AllineaLavoratore`, dopo l'importazione dei lavoratori
+3. i 10 flussi `SDF_API…`
+4. `SDF_F4_Promemoria` e `SDF_F5_RiepilogoMensile`
 
-Se un flusso non si attiva, aprirlo nella finestra di progettazione: i dettagli e le verifiche post-importazione sono in [powerautomate/README.md](../powerautomate/README.md).
+## 4.6 Pubblicare l'app per i lavoratori
 
-## 4.7 Caricare i dati iniziali
+- **Intranet:** su una pagina SharePoint della intranet aggiungere la **web part Power Apps** e incollare il collegamento web o l'ID dell'app. I lavoratori la trovano dove sono già abituati ad andare.
+- **Smartphone:** app *Power Apps* (iOS/Android) con l'account Microsoft 365, oppure il collegamento web nel browser.
+- **Teams** (facoltativo): *App → Power Apps → aggiungi*.
 
-| Ordine | Tabella | Come | Note |
-|---|---|---|---|
-| 1 | **Strutture organizzative** | Excel (make.powerapps.com → Tabelle → *Importa → Importa dati da Excel*) o schermata Amministrazione dell'app | Area, servizio, centro di costo, coordinatore servizio, date di validità |
-| 2 | **Catalogo corsi** | Excel o schermata Amministrazione | Solo i corsi *Datore di lavoro*: codice, titolo, modalità, durata, gettone previsto, attivo |
-| 3 | **Lavoratori** | Excel (modello `dataverse/seed/lavoratori_modello.csv`) o un **flusso di dati** (Dataflow) collegato all'anagrafica paghe/HR | `Login Microsoft 365` in minuscolo. Dopo l'importazione compilare *Utente Microsoft 365*, *Struttura* e *Coordinatore*: F7 completa gli altri campi e condivide i record |
+## 4.7 Collaudo e avvio
 
-> Per mantenere l'organigramma allineato nel tempo conviene un **Dataflow pianificato** (es. settimanale) dall'anagrafica del gestionale del personale verso *Lavoratori*, con chiave `Login Microsoft 365`.
+1. Collaudare con almeno un utente per ruolo seguendo [05-collaudo.md](05-collaudo.md).
+2. Comunicazione ai lavoratori:
+   - link all'app;
+   - al primo accesso va inserita l'**e-mail personale**, dove arriveranno le notifiche;
+   - breve guida;
+   - informativa privacy.
+3. Comunicazione ai coordinatori: notifiche sull'e-mail aziendale; promemoria dopo 3, 5 e 7 giorni lavorativi.
 
-## 4.8 Collaudo e passaggio in produzione
-
-1. Eseguire i casi di test di [05-collaudo.md](05-collaudo.md) con almeno un utente per ruolo.
-2. Esportare la soluzione come **gestita** (Soluzioni → Esporta → Gestita) e importarla nell'ambiente di produzione, oppure usare le **Pipeline** di Power Platform.
-3. In produzione: ricollegare i riferimenti di connessione, impostare le variabili d'ambiente (in particolare `sdf_AppUrl` di produzione), attivare i flussi nell'ordine di 4.6, caricare i dati reali.
-4. Comunicazione ai lavoratori: link all'app (anche da **Microsoft Teams**, *App → Power Apps → aggiungi come scheda/app*), breve guida, informativa privacy.
-
-## 4.9 Manutenzione
+## 4.8 Manutenzione
 
 | Attività | Chi | Dove |
 |---|---|---|
-| Nuovi coordinatori, cambi di servizio | Amministratore | App → Amministrazione → Lavoratori / Organigramma, oppure Dataflow |
-| Nuovi ruoli HR / Admin | IT | Gruppi Entra ID |
-| Nuovi corsi a catalogo; validazione dei corsi esterni inseriti dai lavoratori | Amministratore / HR | App → Amministrazione → Catalogo corsi |
-| Festività dell'anno successivo | Amministratore | Variabile d'ambiente `sdf_Festivita` |
+| Nuovi lavoratori, cambi di servizio o di coordinatore | Amministratore / HR | App → Amministrazione → Lavoratori, oppure lista *Lavoratori* |
+| Nuovi utenti HR o amministratori | Amministratore | App → Amministrazione → Ruoli (F9 aggiorna i gruppi) |
+| Nuovi corsi; validazione dei corsi esterni inseriti dai lavoratori | Amministratore | App → Amministrazione → Catalogo corsi |
+| Festività dell'anno successivo (con il **patrono locale**) | Amministratore | Lista *Configurazione* → `Festivita` |
 | Riapertura di un mese chiuso | Amministratore | App → Chiusura mensile → Riapri |
-| Modifiche al modello dati | Sviluppatore | `dataverse/schema.yaml` → `provision.py` → `genera_documentazione.py` |
+| Modifica del modello dati | Sviluppatore | `sharepoint/schema.yaml` → `python sharepoint/genera_template.py` → rilanciare lo script (aggiunge le colonne mancanti) |
+| Controllo errori dei flussi | Amministratore | make.powerautomate.com con l'account di servizio → cronologia delle esecuzioni; le e-mail di errore arrivano a `EmailHR` |

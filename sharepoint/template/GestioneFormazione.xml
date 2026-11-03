@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generato da sharepoint/genera_template.py a partire da sharepoint/schema.yaml: non modificare a mano -->
+<pnp:Provisioning xmlns:pnp="http://schemas.dev.office.com/PnP/2022/09/ProvisioningSchema">
+  <pnp:Preferences Generator="Formazione-Dolce/sharepoint/genera_template.py" />
+  <pnp:Templates ID="GestioneFormazione-Contenitore">
+    <pnp:ProvisioningTemplate ID="GestioneFormazione" Version="1" DisplayName="Gestione ore formazione" Scope="RootSite">
+      <pnp:Security>
+        <pnp:SiteGroups>
+          <pnp:SiteGroup Title="Formazione - HR" Description="Ufficio HR/Formazione: lettura di tutte le liste, modifica anagrafica lavoratori. Membri gestiti dal flusso F9 a partire dalla lista Ruoli applicativi." Owner="{associatedownergroup}" AllowMembersEditMembership="false" AllowRequestToJoinLeave="false" AutoAcceptRequestToJoinLeave="false" OnlyAllowMembersViewMembership="true" />
+          <pnp:SiteGroup Title="Formazione - Paghe" Description="Ufficio Paghe: lettura dei soli file paghe." Owner="{associatedownergroup}" AllowMembersEditMembership="false" AllowRequestToJoinLeave="false" AutoAcceptRequestToJoinLeave="false" OnlyAllowMembersViewMembership="true" />
+        </pnp:SiteGroups>
+        <pnp:Permissions>
+          <pnp:RoleAssignments>
+            <pnp:RoleAssignment Principal="Formazione - HR" RoleDefinition="{roledefinition:Reader}" />
+          </pnp:RoleAssignments>
+        </pnp:Permissions>
+      </pnp:Security>
+      <pnp:Lists>
+        <pnp:ListInstance Title="Richieste formazione" Description="Richieste di riconoscimento delle ore di formazione. Scrittura solo tramite i flussi API; lettura diretta solo per HR e amministratori." TemplateType="100" Url="Lists/RichiesteFormazione" OnQuickLaunch="true" EnableVersioning="true" MaxVersionLimit="100" EnableFolderCreation="false" NoCrawl="true" ContentTypesEnabled="false" RemoveExistingContentTypes="false">
+          <pnp:Views RemoveExistingViews="true">
+            <View DisplayName="Tutte le richieste" DefaultView="TRUE" MobileView="TRUE" Type="HTML"><Query><OrderBy><FieldRef Name="Modified" Ascending="FALSE" /></OrderBy></Query><ViewFields><FieldRef Name="LinkTitle" /><FieldRef Name="Cognome" /><FieldRef Name="Nome" /><FieldRef Name="CodiceCorso" /><FieldRef Name="DataSessione" /><FieldRef Name="OreFrequentate" /><FieldRef Name="OreRetribuiteRichieste" /><FieldRef Name="OreGettoneRichieste" /><FieldRef Name="Stato" /><FieldRef Name="CoordinatoreNome" /><FieldRef Name="Modified" /></ViewFields><RowLimit Paged="TRUE">50</RowLimit></View>
+            <View DisplayName="In attesa del coordinatore" DefaultView="FALSE" MobileView="TRUE" Type="HTML"><Query><Where><Eq><FieldRef Name="Stato" /><Value Type="Choice">In attesa del coordinatore</Value></Eq></Where></Query><ViewFields><FieldRef Name="LinkTitle" /><FieldRef Name="Cognome" /><FieldRef Name="Nome" /><FieldRef Name="CoordinatoreNome" /><FieldRef Name="DataInvio" /><FieldRef Name="GiorniAttesa" /><FieldRef Name="Stato" /></ViewFields><RowLimit Paged="TRUE">50</RowLimit></View>
+            <View DisplayName="Da validare HR" DefaultView="FALSE" MobileView="TRUE" Type="HTML"><Query><Where><Eq><FieldRef Name="Stato" /><Value Type="Choice">In attesa di validazione HR</Value></Eq></Where></Query><ViewFields><FieldRef Name="LinkTitle" /><FieldRef Name="Cognome" /><FieldRef Name="Nome" /><FieldRef Name="CentroDiCosto" /><FieldRef Name="CodiceCorso" /><FieldRef Name="DataSessione" /><FieldRef Name="OreRetribuiteCoord" /><FieldRef Name="OreGettoneCoord" /><FieldRef Name="Stato" /></ViewFields><RowLimit Paged="TRUE">50</RowLimit></View>
+          </pnp:Views>
+          <pnp:Fields>
+            <Field Type="Text" ID="{61b66158-cc46-5016-87d8-3e20ce521a69}" Name="LavoratoreLogin" StaticName="LavoratoreLogin" DisplayName="Login lavoratore" Required="FALSE" Indexed="TRUE" MaxLength="255" />
+            <Field Type="Number" ID="{e0b21eb9-9fc3-5623-84db-90c71f92e69e}" Name="LavoratoreRif" StaticName="LavoratoreRif" DisplayName="ID lavoratore" Required="FALSE" Decimals="0" Min="0" />
+            <Field Type="Text" ID="{56f2fa0d-5d80-5c68-a1f4-4f3624c3ab38}" Name="Cognome" StaticName="Cognome" DisplayName="Cognome" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{e85281f2-131a-55cf-a68b-98509033371b}" Name="Nome" StaticName="Nome" DisplayName="Nome" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{9500a88a-991f-5f30-be57-d305c04c38c7}" Name="EmailPersonale" StaticName="EmailPersonale" DisplayName="E-mail personale" Required="FALSE" MaxLength="255" />
+            <Field Type="Choice" ID="{fbe7fb77-f25a-5377-9e64-219eacb074dd}" Name="Area" StaticName="Area" DisplayName="Area" Required="FALSE" Format="Dropdown" FillInChoice="FALSE"><CHOICES><CHOICE>Area Nord Ovest</CHOICE><CHOICE>Area Centro</CHOICE><CHOICE>Area Educativa</CHOICE><CHOICE>Area Socio Sanitaria</CHOICE><CHOICE>Area Staff</CHOICE></CHOICES></Field>
+            <Field Type="Text" ID="{ab297c73-3057-53e8-a16b-04b234b83cda}" Name="Servizio" StaticName="Servizio" DisplayName="Servizio" Required="FALSE" Indexed="TRUE" MaxLength="255" />
+            <Field Type="Text" ID="{130fd5df-bc40-58dd-87f5-122999e0f431}" Name="CentroDiCosto" StaticName="CentroDiCosto" DisplayName="Centro di costo" Required="FALSE" Indexed="TRUE" MaxLength="255" />
+            <Field Type="Number" ID="{f8cb11e8-7ba3-5c48-a4bd-981a4741b25a}" Name="StrutturaRif" StaticName="StrutturaRif" DisplayName="ID struttura" Required="FALSE" Decimals="0" Min="0" />
+            <Field Type="Text" ID="{249e4860-302d-5a89-a103-847461a27b69}" Name="CoordinatoreLogin" StaticName="CoordinatoreLogin" DisplayName="Login coordinatore" Required="FALSE" Indexed="TRUE" MaxLength="255" />
+            <Field Type="Text" ID="{030b4b60-0f44-59d3-9341-d572be76fec0}" Name="CoordinatoreNome" StaticName="CoordinatoreNome" DisplayName="Coordinatore" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{dbd2aef2-df79-5b36-b7f1-bd46c6592a60}" Name="CoordinatoreEmail" StaticName="CoordinatoreEmail" DisplayName="E-mail coordinatore" Required="FALSE" MaxLength="255" />
+            <Field Type="Number" ID="{1ccaac99-50de-5cfc-8885-f0bab60ce1ff}" Name="CorsoRif" StaticName="CorsoRif" DisplayName="ID corso" Required="FALSE" Decimals="0" Min="0" />
+            <Field Type="Text" ID="{ea9a2b6e-1793-5734-ada2-5f28e4a1d4bd}" Name="CodiceCorso" StaticName="CodiceCorso" DisplayName="Codice univoco corso" Required="FALSE" Indexed="TRUE" MaxLength="255" />
+            <Field Type="Text" ID="{69544210-977b-5005-bfd2-e83d5bd293ec}" Name="TitoloCorsoCatalogo" StaticName="TitoloCorsoCatalogo" DisplayName="Titolo del corso a catalogo" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{88026bc8-0c88-5f4c-b514-b16b78910633}" Name="TitoloCorsoLibero" StaticName="TitoloCorsoLibero" DisplayName="Titolo corso libero" Required="FALSE" MaxLength="255" />
+            <Field Type="Number" ID="{4757afaf-2da5-5942-b883-f05dcf47774e}" Name="DurataCorso" StaticName="DurataCorso" DisplayName="Durata complessiva corso" Required="FALSE" Decimals="2" Min="0" />
+            <Field Type="Choice" ID="{92dc6cdf-d05c-5c19-a832-eec23ffa47b7}" Name="EnteErogatore" StaticName="EnteErogatore" DisplayName="Ente erogatore" Required="FALSE" Description="Datore di lavoro = corso interno; Committente o altro soggetto = corso esterno" Format="Dropdown" FillInChoice="FALSE"><CHOICES><CHOICE>Datore di lavoro</CHOICE><CHOICE>Committente o altro soggetto</CHOICE></CHOICES></Field>
+            <Field Type="Choice" ID="{7abb5f6d-f4f3-5864-a357-609450ead9c7}" Name="Modalita" StaticName="Modalita" DisplayName="Modalità di svolgimento" Required="FALSE" Format="Dropdown" FillInChoice="FALSE"><CHOICES><CHOICE>In presenza</CHOICE><CHOICE>A distanza - sincrona</CHOICE><CHOICE>A distanza - asincrona</CHOICE></CHOICES></Field>
+            <Field Type="Boolean" ID="{abe220d1-9146-54f3-be70-e9555bbbee0d}" Name="PiuGiornate" StaticName="PiuGiornate" DisplayName="Più giornate formative" Required="FALSE"><Default>0</Default></Field>
+            <Field Type="DateTime" ID="{206a1859-4f7e-5c39-baaf-13563f4e36b8}" Name="DataSessione" StaticName="DataSessione" DisplayName="Data sessione formativa" Required="FALSE" Indexed="TRUE" Format="DateOnly" FriendlyDisplayFormat="Disabled" />
+            <Field Type="Text" ID="{db9eb18b-a4b4-5b89-80f5-e203d29cc8c7}" Name="OraInizioSessione" StaticName="OraInizioSessione" DisplayName="Ora inizio sessione" Required="FALSE" Description="HH:mm" MaxLength="5" />
+            <Field Type="Text" ID="{3ef193e3-c3d6-529c-9dad-62678eb515fb}" Name="OraFineSessione" StaticName="OraFineSessione" DisplayName="Ora fine sessione" Required="FALSE" MaxLength="5" />
+            <Field Type="Number" ID="{9a8d0876-050b-5705-8f5f-aedfd6cc5ed4}" Name="DurataSessione" StaticName="DurataSessione" DisplayName="Durata sessione" Required="FALSE" Description="Ore (fine - inizio sessione)" Decimals="2" Min="0" />
+            <Field Type="Text" ID="{0f05c79a-4bce-5967-adb5-7ccf92b34cbd}" Name="OraIngresso" StaticName="OraIngresso" DisplayName="Ora ingresso lavoratore" Required="FALSE" MaxLength="5" />
+            <Field Type="Text" ID="{f007947c-eccf-5f07-87c8-f20b2dc95772}" Name="OraUscita" StaticName="OraUscita" DisplayName="Ora uscita lavoratore" Required="FALSE" MaxLength="5" />
+            <Field Type="Number" ID="{3565c76f-3986-5f4c-a591-0219957eaa1e}" Name="OreFrequentate" StaticName="OreFrequentate" DisplayName="Ore frequentate dichiarate" Required="FALSE" Decimals="2" Min="0" />
+            <Field Type="Number" ID="{1149ff74-654a-5945-8c12-d163a3e31d4c}" Name="OreRetribuiteRichieste" StaticName="OreRetribuiteRichieste" DisplayName="Ore retribuite richieste" Required="FALSE" Decimals="2" Min="0" />
+            <Field Type="Number" ID="{51b2533a-3b8b-5014-900a-d55d987184eb}" Name="OreGettoneRichieste" StaticName="OreGettoneRichieste" DisplayName="Ore gettone richieste" Required="FALSE" Decimals="2" Min="0" />
+            <Field Type="Number" ID="{6ba71a50-f2a0-5368-ae88-41aabc4c6279}" Name="OreRetribuiteCoord" StaticName="OreRetribuiteCoord" DisplayName="Ore retribuite riconosciute coordinatore" Required="FALSE" Decimals="2" Min="0" />
+            <Field Type="Number" ID="{6683c5ba-ee1c-5c7f-894d-e86c596b128f}" Name="OreGettoneCoord" StaticName="OreGettoneCoord" DisplayName="Ore gettone riconosciute coordinatore" Required="FALSE" Decimals="2" Min="0" />
+            <Field Type="Number" ID="{77608257-608f-5fd7-b061-c1a74b7148b6}" Name="OreRetribuiteHR" StaticName="OreRetribuiteHR" DisplayName="Ore retribuite approvate HR" Required="FALSE" Decimals="2" Min="0" />
+            <Field Type="Number" ID="{1846d79c-bb05-5dcf-8a0a-984dc151cb1d}" Name="OreGettoneHR" StaticName="OreGettoneHR" DisplayName="Ore gettone approvate HR" Required="FALSE" Decimals="2" Min="0" />
+            <Field Type="URL" ID="{62e9e8a8-226d-5296-b5be-ec17ac6ee8cd}" Name="AttestatoUrl" StaticName="AttestatoUrl" DisplayName="Attestato" Required="FALSE" Format="Hyperlink" />
+            <Field Type="URL" ID="{f3b99201-f24f-5ed2-b3ab-9750c1636750}" Name="AltraDocUrl" StaticName="AltraDocUrl" DisplayName="Altra documentazione" Required="FALSE" Format="Hyperlink" />
+            <Field Type="Boolean" ID="{91d3b6cc-a0e5-58a5-a148-dc74d97b3cfd}" Name="AttestatoPresente" StaticName="AttestatoPresente" DisplayName="Attestato presente" Required="FALSE"><Default>0</Default></Field>
+            <Field Type="Note" ID="{abd8d591-fd43-5390-83e4-3a56982468f3}" Name="NoteLavoratore" StaticName="NoteLavoratore" DisplayName="Note del lavoratore" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+            <Field Type="Note" ID="{57e4d081-a334-5ea1-a2c5-f0555f5484af}" Name="NoteCoordinatore" StaticName="NoteCoordinatore" DisplayName="Note del coordinatore" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+            <Field Type="Note" ID="{719a491e-2acb-548c-b65f-ccc829ad0709}" Name="NoteHR" StaticName="NoteHR" DisplayName="Note HR" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+            <Field Type="Choice" ID="{0edad68c-edad-57eb-8584-472dbc48e7c5}" Name="Stato" StaticName="Stato" DisplayName="Stato richiesta" Required="FALSE" Indexed="TRUE" Format="Dropdown" FillInChoice="FALSE"><Default>Bozza</Default><CHOICES><CHOICE>Bozza</CHOICE><CHOICE>Inviata al coordinatore</CHOICE><CHOICE>In attesa del coordinatore</CHOICE><CHOICE>Integrazione richiesta dal coordinatore</CHOICE><CHOICE>Respinta dal coordinatore</CHOICE><CHOICE>Approvata dal coordinatore</CHOICE><CHOICE>In attesa di validazione HR</CHOICE><CHOICE>Integrazione richiesta da HR</CHOICE><CHOICE>Respinta da HR</CHOICE><CHOICE>Validata da HR</CHOICE><CHOICE>Inclusa nel riepilogo mensile</CHOICE><CHOICE>Inviata a Payroll</CHOICE><CHOICE>Annullata</CHOICE></CHOICES></Field>
+            <Field Type="DateTime" ID="{e0d2f10f-7af6-56fc-9a5a-5af728d61324}" Name="DataInvio" StaticName="DataInvio" DisplayName="Data invio" Required="FALSE" Format="DateTime" FriendlyDisplayFormat="Disabled" />
+            <Field Type="DateTime" ID="{9f8aa480-0a9a-5af4-b5a7-561b2e1bb121}" Name="DataApprovazioneCoord" StaticName="DataApprovazioneCoord" DisplayName="Data approvazione coordinatore" Required="FALSE" Format="DateTime" FriendlyDisplayFormat="Disabled" />
+            <Field Type="DateTime" ID="{898bba7b-75c6-52c6-b491-7b7389123757}" Name="DataValidazioneHR" StaticName="DataValidazioneHR" DisplayName="Data validazione HR" Required="FALSE" Format="DateTime" FriendlyDisplayFormat="Disabled" />
+            <Field Type="Number" ID="{da5ba47e-7f20-5839-a0bd-844b1ccb56a8}" Name="MeseCompetenza" StaticName="MeseCompetenza" DisplayName="Mese di competenza" Required="FALSE" Indexed="TRUE" Decimals="0" Min="0" />
+            <Field Type="Number" ID="{b1180e39-2d56-51d2-b8a7-95ccef885cec}" Name="AnnoCompetenza" StaticName="AnnoCompetenza" DisplayName="Anno di competenza" Required="FALSE" Indexed="TRUE" Decimals="0" Min="0" />
+            <Field Type="Text" ID="{c7178567-9a01-509b-bc92-c34babc5c67a}" Name="PeriodoChiusura" StaticName="PeriodoChiusura" DisplayName="Periodo chiusura" Required="FALSE" Description="AAAA-MM della chiusura mensile che ha incluso la richiesta" MaxLength="7" />
+            <Field Type="Boolean" ID="{bc18fbec-e398-538c-ab50-5d2bb23673f9}" Name="ConfermaPartecipazione" StaticName="ConfermaPartecipazione" DisplayName="Conferma partecipazione" Required="FALSE"><Default>0</Default></Field>
+            <Field Type="Boolean" ID="{1077153d-002b-589a-bf0f-f3c5010bcc54}" Name="ConfermaCorrettezza" StaticName="ConfermaCorrettezza" DisplayName="Conferma correttezza dati" Required="FALSE"><Default>0</Default></Field>
+            <Field Type="Boolean" ID="{cb4613d9-45f0-560d-a6b9-3b2f063d06fd}" Name="AutorizzazioneInvio" StaticName="AutorizzazioneInvio" DisplayName="Autorizzazione all'invio" Required="FALSE"><Default>0</Default></Field>
+            <Field Type="Boolean" ID="{e86c9469-0e6a-5c88-8e46-4930c744fa32}" Name="PossibileDuplicato" StaticName="PossibileDuplicato" DisplayName="Possibile duplicato" Required="FALSE"><Default>0</Default></Field>
+            <Field Type="Note" ID="{4b44b7c9-cebf-530e-9521-1322d6523cef}" Name="Anomalie" StaticName="Anomalie" DisplayName="Anomalie rilevate" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+            <Field Type="Number" ID="{263bf052-bad3-565f-bb3f-1d893d58eab5}" Name="GiorniAttesa" StaticName="GiorniAttesa" DisplayName="Giorni lavorativi in attesa" Required="FALSE" Decimals="0" Min="0" />
+            <Field Type="Boolean" ID="{6184f217-107c-52e8-8d61-3dd5197c343a}" Name="SegnalataHR" StaticName="SegnalataHR" DisplayName="Sollecito segnalato a HR" Required="FALSE"><Default>0</Default></Field>
+            <Field Type="Text" ID="{3264bfe4-ad54-5c30-8c2b-01dd2984fc68}" Name="UltimaModificaDa" StaticName="UltimaModificaDa" DisplayName="Utente ultima modifica" Required="FALSE" Description="Login di chi ha eseguito l'ultima azione (le scritture avvengono tramite l'account di servizio)" MaxLength="255" />
+          </pnp:Fields>
+          <pnp:FieldRefs>
+            <pnp:FieldRef ID="fa564e0f-0c70-4ab9-b863-0177e6ddd247" Name="Title" DisplayName="ID richiesta" Required="false" />
+          </pnp:FieldRefs>
+        </pnp:ListInstance>
+        <pnp:ListInstance Title="Lavoratori" Description="Anagrafica dei lavoratori e assegnazione organizzativa corrente." TemplateType="100" Url="Lists/Lavoratori" OnQuickLaunch="true" EnableVersioning="true" MaxVersionLimit="100" EnableFolderCreation="false" NoCrawl="true" ContentTypesEnabled="false" RemoveExistingContentTypes="false">
+          <pnp:Views RemoveExistingViews="true">
+            <View DisplayName="Tutti i lavoratori" DefaultView="TRUE" MobileView="TRUE" Type="HTML"><Query><OrderBy><FieldRef Name="Title" Ascending="TRUE" /></OrderBy></Query><ViewFields><FieldRef Name="LinkTitle" /><FieldRef Name="Login" /><FieldRef Name="Servizio" /><FieldRef Name="CentroDiCosto" /><FieldRef Name="CoordinatoreNome" /><FieldRef Name="StatoLavoratore" /><FieldRef Name="CFRegistrato" /></ViewFields><RowLimit Paged="TRUE">50</RowLimit></View>
+          </pnp:Views>
+          <pnp:Fields>
+            <Field Type="User" ID="{49022e69-8a12-51cf-ba59-ca69479489f8}" Name="UtenteM365" StaticName="UtenteM365" DisplayName="Utente Microsoft 365" Required="FALSE" List="UserInfo" ShowField="ImnName" UserSelectionMode="PeopleOnly" UserSelectionScope="0" />
+            <Field Type="Text" ID="{c0702018-a33f-5ecd-9d8e-ff87dd7ddd1c}" Name="Login" StaticName="Login" DisplayName="Login Microsoft 365" Required="TRUE" Description="UPN in minuscolo, es. mario.rossi@societadolce.it" Indexed="TRUE" EnforceUniqueValues="TRUE" MaxLength="255" />
+            <Field Type="Text" ID="{a029120c-eb62-5d88-9093-433c7aa6a5fa}" Name="Cognome" StaticName="Cognome" DisplayName="Cognome" Required="TRUE" MaxLength="255" />
+            <Field Type="Text" ID="{397ede71-01ee-555c-a673-13f25e6dffcb}" Name="Nome" StaticName="Nome" DisplayName="Nome" Required="TRUE" MaxLength="255" />
+            <Field Type="Text" ID="{b4bf5f18-9cc9-5ebc-b921-e1e7de565866}" Name="EmailAziendale" StaticName="EmailAziendale" DisplayName="E-mail aziendale" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{00bb2c39-e1e1-50bf-ac0c-babd4b9d10bb}" Name="EmailPersonale" StaticName="EmailPersonale" DisplayName="E-mail personale" Required="FALSE" Description="Inserita dal lavoratore al primo accesso: riceve qui le notifiche" MaxLength="255" />
+            <Field Type="Text" ID="{e11724ec-86e6-5e6e-8c65-59df3c09a5d4}" Name="CodiceFiscale" StaticName="CodiceFiscale" DisplayName="Codice fiscale" Required="FALSE" MaxLength="16" />
+            <Field Type="Text" ID="{f9fc098d-07bc-5862-bb39-abda72642953}" Name="CFMascherato" StaticName="CFMascherato" DisplayName="Codice fiscale (mascherato)" Required="FALSE" MaxLength="16" />
+            <Field Type="Boolean" ID="{f2c54040-0ba4-5e35-aa47-4b95520ea2ef}" Name="CFRegistrato" StaticName="CFRegistrato" DisplayName="Codice fiscale registrato" Required="FALSE"><Default>0</Default></Field>
+            <Field Type="Number" ID="{1e6386df-8f58-5e4f-8b05-8031f63c651f}" Name="StrutturaRif" StaticName="StrutturaRif" DisplayName="ID struttura" Required="FALSE" Decimals="0" Min="0" />
+            <Field Type="Choice" ID="{9f5ff587-fd56-59e0-b6d0-59a9eeba6cc0}" Name="Area" StaticName="Area" DisplayName="Area" Required="FALSE" Format="Dropdown" FillInChoice="FALSE"><CHOICES><CHOICE>Area Nord Ovest</CHOICE><CHOICE>Area Centro</CHOICE><CHOICE>Area Educativa</CHOICE><CHOICE>Area Socio Sanitaria</CHOICE><CHOICE>Area Staff</CHOICE></CHOICES></Field>
+            <Field Type="Text" ID="{47d11d42-25af-51e5-9de3-8d53dc95116c}" Name="Servizio" StaticName="Servizio" DisplayName="Servizio" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{f0d9cf85-7181-5f5c-a020-a717185f5a45}" Name="CentroDiCosto" StaticName="CentroDiCosto" DisplayName="Centro di costo" Required="FALSE" Indexed="TRUE" MaxLength="255" />
+            <Field Type="User" ID="{524923ba-0885-5be3-8a9d-459b3de05ef5}" Name="Coordinatore" StaticName="Coordinatore" DisplayName="Coordinatore assegnato" Required="FALSE" List="UserInfo" ShowField="ImnName" UserSelectionMode="PeopleOnly" UserSelectionScope="0" />
+            <Field Type="Text" ID="{6beb354c-788d-51cb-b165-ef19f314355d}" Name="CoordinatoreLogin" StaticName="CoordinatoreLogin" DisplayName="Login coordinatore" Required="FALSE" Indexed="TRUE" MaxLength="255" />
+            <Field Type="Text" ID="{495b2f9e-4ae8-5caa-be9a-0b6604d28476}" Name="CoordinatoreNome" StaticName="CoordinatoreNome" DisplayName="Nome coordinatore" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{d27bc71c-0269-5e44-887b-b71e8387dbf7}" Name="CoordinatoreEmail" StaticName="CoordinatoreEmail" DisplayName="E-mail coordinatore" Required="FALSE" MaxLength="255" />
+            <Field Type="Choice" ID="{331424b6-4642-5943-9fdc-7526147bd033}" Name="StatoLavoratore" StaticName="StatoLavoratore" DisplayName="Stato lavoratore" Required="FALSE" Indexed="TRUE" Format="Dropdown" FillInChoice="FALSE"><Default>Attivo</Default><CHOICES><CHOICE>Attivo</CHOICE><CHOICE>Non attivo</CHOICE></CHOICES></Field>
+            <Field Type="DateTime" ID="{0685db4b-d2a5-5b39-82c0-65d889a9e76c}" Name="InizioAssegnazione" StaticName="InizioAssegnazione" DisplayName="Data inizio validità assegnazione" Required="FALSE" Format="DateOnly" FriendlyDisplayFormat="Disabled" />
+            <Field Type="DateTime" ID="{62ef0e2b-3a3a-5b55-b038-38b2ececa690}" Name="FineAssegnazione" StaticName="FineAssegnazione" DisplayName="Data fine validità assegnazione" Required="FALSE" Format="DateOnly" FriendlyDisplayFormat="Disabled" />
+            <Field Type="Note" ID="{321945c0-fe05-504b-84f1-ca396fd34700}" Name="SegnalazioneVariazione" StaticName="SegnalazioneVariazione" DisplayName="Segnalazione variazione dati" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+            <Field Type="Boolean" ID="{7c65ec33-b934-5701-acac-4273373c32b5}" Name="SegnalazioneAperta" StaticName="SegnalazioneAperta" DisplayName="Segnalazione da gestire" Required="FALSE" Indexed="TRUE"><Default>0</Default></Field>
+          </pnp:Fields>
+          <pnp:FieldRefs>
+            <pnp:FieldRef ID="fa564e0f-0c70-4ab9-b863-0177e6ddd247" Name="Title" DisplayName="Nominativo" Required="true" />
+          </pnp:FieldRefs>
+          <pnp:Security>
+            <pnp:BreakRoleInheritance CopyRoleAssignments="true" ClearSubscopes="true">
+              <pnp:RoleAssignment Principal="Formazione - HR" RoleDefinition="{roledefinition:Contributor}" />
+            </pnp:BreakRoleInheritance>
+          </pnp:Security>
+        </pnp:ListInstance>
+        <pnp:ListInstance Title="Strutture organizzative" Description="Organigramma: un elemento per servizio / centro di costo." TemplateType="100" Url="Lists/StruttureOrganizzative" OnQuickLaunch="true" EnableVersioning="true" MaxVersionLimit="100" EnableFolderCreation="false" NoCrawl="true" ContentTypesEnabled="false" RemoveExistingContentTypes="false">
+          <pnp:Views RemoveExistingViews="true">
+            <View DisplayName="Tutte le strutture" DefaultView="TRUE" MobileView="TRUE" Type="HTML"><Query><OrderBy><FieldRef Name="Title" Ascending="TRUE" /></OrderBy></Query><ViewFields><FieldRef Name="LinkTitle" /><FieldRef Name="Area" /><FieldRef Name="CentroDiCosto" /><FieldRef Name="CoordinatoreServizio" /><FieldRef Name="Attiva" /></ViewFields><RowLimit Paged="TRUE">50</RowLimit></View>
+          </pnp:Views>
+          <pnp:Fields>
+            <Field Type="Choice" ID="{9c7501ab-d252-5908-b340-2950908aadca}" Name="Area" StaticName="Area" DisplayName="Area" Required="TRUE" Format="Dropdown" FillInChoice="FALSE"><CHOICES><CHOICE>Area Nord Ovest</CHOICE><CHOICE>Area Centro</CHOICE><CHOICE>Area Educativa</CHOICE><CHOICE>Area Socio Sanitaria</CHOICE><CHOICE>Area Staff</CHOICE></CHOICES></Field>
+            <Field Type="Text" ID="{69235aa5-48fa-51cd-aa89-e508ed2c58b7}" Name="CentroDiCosto" StaticName="CentroDiCosto" DisplayName="Centro di costo" Required="TRUE" Indexed="TRUE" MaxLength="255" />
+            <Field Type="User" ID="{8b9e54a3-1cc9-58c0-af8f-44a787353c65}" Name="CoordinatoreResponsabile" StaticName="CoordinatoreResponsabile" DisplayName="Coordinatore responsabile" Required="FALSE" List="UserInfo" ShowField="ImnName" UserSelectionMode="PeopleOnly" UserSelectionScope="0" />
+            <Field Type="User" ID="{3e87c51f-e422-5207-8743-79666806de27}" Name="CoordinatoreServizio" StaticName="CoordinatoreServizio" DisplayName="Coordinatore servizio" Required="FALSE" List="UserInfo" ShowField="ImnName" UserSelectionMode="PeopleOnly" UserSelectionScope="0" />
+            <Field Type="Text" ID="{9eee3073-df09-525d-b73a-063f6872d6a2}" Name="CoordinatoreServizioLogin" StaticName="CoordinatoreServizioLogin" DisplayName="Login coordinatore servizio" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{881c3ce3-2de2-5b35-81fa-e4f204e512f2}" Name="EmailCoordinatoreServizio" StaticName="EmailCoordinatoreServizio" DisplayName="E-mail coordinatore servizio" Required="FALSE" MaxLength="255" />
+            <Field Type="DateTime" ID="{c0125851-6616-5f64-a1ca-6b90a18313e2}" Name="DataInizioValidita" StaticName="DataInizioValidita" DisplayName="Data inizio validità" Required="FALSE" Format="DateOnly" FriendlyDisplayFormat="Disabled" />
+            <Field Type="DateTime" ID="{95c5336d-b74c-5a38-93e9-bab7a8bbede4}" Name="DataFineValidita" StaticName="DataFineValidita" DisplayName="Data fine validità" Required="FALSE" Format="DateOnly" FriendlyDisplayFormat="Disabled" />
+            <Field Type="Boolean" ID="{02b57f36-798b-5a1a-a8c1-186db8803c59}" Name="Attiva" StaticName="Attiva" DisplayName="Struttura attiva" Required="FALSE"><Default>1</Default></Field>
+          </pnp:Fields>
+          <pnp:FieldRefs>
+            <pnp:FieldRef ID="fa564e0f-0c70-4ab9-b863-0177e6ddd247" Name="Title" DisplayName="Servizio" Required="true" />
+          </pnp:FieldRefs>
+        </pnp:ListInstance>
+        <pnp:ListInstance Title="Catalogo corsi" Description="Catalogo dei corsi aziendali e corsi esterni inseriti dai lavoratori. Leggibile da tutti gli utenti dell'app." TemplateType="100" Url="Lists/CatalogoCorsi" OnQuickLaunch="true" EnableVersioning="true" MaxVersionLimit="100" EnableFolderCreation="false" NoCrawl="true" ContentTypesEnabled="false" RemoveExistingContentTypes="false">
+          <pnp:Views RemoveExistingViews="true">
+            <View DisplayName="Tutti i corsi" DefaultView="TRUE" MobileView="TRUE" Type="HTML"><Query><OrderBy><FieldRef Name="Title" Ascending="TRUE" /></OrderBy></Query><ViewFields><FieldRef Name="LinkTitle" /><FieldRef Name="CodiceCorso" /><FieldRef Name="EnteErogatore" /><FieldRef Name="Modalita" /><FieldRef Name="DurataCorso" /><FieldRef Name="GettonePrevisto" /><FieldRef Name="CorsoAttivo" /><FieldRef Name="StatoValidazione" /></ViewFields><RowLimit Paged="TRUE">50</RowLimit></View>
+          </pnp:Views>
+          <pnp:Fields>
+            <Field Type="Text" ID="{5b1ef037-15c3-5065-b883-d873147794b4}" Name="CodiceCorso" StaticName="CodiceCorso" DisplayName="Codice univoco corso" Required="FALSE" Description="Interni: codice HR. Esterni: EXT-&lt;ID&gt; generato dal flusso" Indexed="TRUE" MaxLength="255" />
+            <Field Type="Note" ID="{eb63ec1b-af8d-5237-a048-a6416a674b75}" Name="Descrizione" StaticName="Descrizione" DisplayName="Descrizione" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+            <Field Type="Choice" ID="{ff30ced9-a8fa-5a2f-bf65-54ce4488f589}" Name="EnteErogatore" StaticName="EnteErogatore" DisplayName="Ente erogatore" Required="TRUE" Indexed="TRUE" Format="Dropdown" FillInChoice="FALSE"><CHOICES><CHOICE>Datore di lavoro</CHOICE><CHOICE>Committente o altro soggetto</CHOICE></CHOICES></Field>
+            <Field Type="Text" ID="{2c3925fd-545b-5f68-ae08-cae4537a6f59}" Name="NomeEnte" StaticName="NomeEnte" DisplayName="Nome ente erogatore" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{f6263250-1f6a-5c03-bc13-5a6c06117ec5}" Name="Tipologia" StaticName="Tipologia" DisplayName="Tipologia" Required="FALSE" MaxLength="255" />
+            <Field Type="Choice" ID="{a4d506e5-bfb8-5103-805f-49cd4f7c4193}" Name="Modalita" StaticName="Modalita" DisplayName="Modalità di svolgimento" Required="FALSE" Format="Dropdown" FillInChoice="FALSE"><CHOICES><CHOICE>In presenza</CHOICE><CHOICE>A distanza - sincrona</CHOICE><CHOICE>A distanza - asincrona</CHOICE></CHOICES></Field>
+            <Field Type="Number" ID="{edeeec87-dc0c-5a64-a1be-5fba56ef5591}" Name="DurataCorso" StaticName="DurataCorso" DisplayName="Durata corso" Required="FALSE" Description="Ore" Decimals="2" Min="0" />
+            <Field Type="Boolean" ID="{f8c46a26-b5dc-56fb-9e3b-fece8188b215}" Name="GettonePrevisto" StaticName="GettonePrevisto" DisplayName="Gettone previsto" Required="FALSE"><Default>0</Default></Field>
+            <Field Type="Boolean" ID="{becf0d51-7df8-5150-b75a-dd5d3b35250f}" Name="CorsoAttivo" StaticName="CorsoAttivo" DisplayName="Corso attivo" Required="FALSE" Indexed="TRUE"><Default>1</Default></Field>
+            <Field Type="Boolean" ID="{62270e64-f642-5764-9c30-c9ebc6d6f276}" Name="PiuGiornate" StaticName="PiuGiornate" DisplayName="Più giornate formative" Required="FALSE"><Default>0</Default></Field>
+            <Field Type="Choice" ID="{0599866f-31cd-5c1c-b20c-26798995a9ac}" Name="Origine" StaticName="Origine" DisplayName="Origine" Required="FALSE" Format="Dropdown" FillInChoice="FALSE"><Default>Catalogo aziendale</Default><CHOICES><CHOICE>Catalogo aziendale</CHOICE><CHOICE>Inserito dal lavoratore</CHOICE></CHOICES></Field>
+            <Field Type="Choice" ID="{84859dc6-e906-5e38-831b-bc7c24532b91}" Name="StatoValidazione" StaticName="StatoValidazione" DisplayName="Stato validazione" Required="FALSE" Indexed="TRUE" Format="Dropdown" FillInChoice="FALSE"><Default>Validato</Default><CHOICES><CHOICE>Da validare</CHOICE><CHOICE>Validato</CHOICE><CHOICE>Scartato</CHOICE></CHOICES></Field>
+            <Field Type="Text" ID="{1e084492-2b75-564a-bd55-710559e7a350}" Name="LoginAutore" StaticName="LoginAutore" DisplayName="Login autore" Required="FALSE" Description="Corsi esterni: lavoratore che li ha inseriti (storico personale)" Indexed="TRUE" MaxLength="255" />
+          </pnp:Fields>
+          <pnp:FieldRefs>
+            <pnp:FieldRef ID="fa564e0f-0c70-4ab9-b863-0177e6ddd247" Name="Title" DisplayName="Titolo corso" Required="true" />
+          </pnp:FieldRefs>
+          <pnp:Security>
+            <pnp:BreakRoleInheritance CopyRoleAssignments="true" ClearSubscopes="true">
+              <pnp:RoleAssignment Principal="{everyonebutexternalusers}" RoleDefinition="{roledefinition:Reader}" />
+            </pnp:BreakRoleInheritance>
+          </pnp:Security>
+        </pnp:ListInstance>
+        <pnp:ListInstance Title="Chiusure mensili" Description="Stato dei periodi mensili e file paghe generati. Leggibile da tutti gli utenti dell'app (per bloccare i mesi chiusi)." TemplateType="100" Url="Lists/ChiusureMensili" OnQuickLaunch="true" EnableVersioning="true" MaxVersionLimit="100" EnableFolderCreation="false" NoCrawl="true" ContentTypesEnabled="false" RemoveExistingContentTypes="false">
+          <pnp:Views RemoveExistingViews="true">
+            <View DisplayName="Tutti i periodi" DefaultView="TRUE" MobileView="TRUE" Type="HTML"><Query><OrderBy><FieldRef Name="Title" Ascending="FALSE" /></OrderBy></Query><ViewFields><FieldRef Name="LinkTitle" /><FieldRef Name="StatoPeriodo" /><FieldRef Name="DataChiusura" /><FieldRef Name="NumeroRichieste" /><FieldRef Name="TotaleOreRiconosciute" /><FieldRef Name="TotaleGettoni" /><FieldRef Name="FilePagheGenerato" /></ViewFields><RowLimit Paged="TRUE">50</RowLimit></View>
+          </pnp:Views>
+          <pnp:Fields>
+            <Field Type="Number" ID="{86dfabde-b4c9-5578-9a3e-96e4e028f609}" Name="Mese" StaticName="Mese" DisplayName="Mese" Required="TRUE" Decimals="0" Min="0" />
+            <Field Type="Number" ID="{479c84f8-2d70-5381-b7f3-a40a2a549b3f}" Name="Anno" StaticName="Anno" DisplayName="Anno" Required="TRUE" Indexed="TRUE" Decimals="0" Min="0" />
+            <Field Type="Choice" ID="{6b90a260-347a-592b-b0b6-2e94858c6c2b}" Name="StatoPeriodo" StaticName="StatoPeriodo" DisplayName="Stato del periodo" Required="FALSE" Format="Dropdown" FillInChoice="FALSE"><Default>Aperto</Default><CHOICES><CHOICE>Aperto</CHOICE><CHOICE>Chiuso</CHOICE><CHOICE>Riaperto</CHOICE></CHOICES></Field>
+            <Field Type="DateTime" ID="{36222655-8cd7-5e85-b8ea-f0d27ddf24a7}" Name="DataChiusura" StaticName="DataChiusura" DisplayName="Data chiusura" Required="FALSE" Format="DateTime" FriendlyDisplayFormat="Disabled" />
+            <Field Type="Text" ID="{d2dacbfc-8530-5e2c-aafc-9a51de87c6ca}" Name="UtenteChiusura" StaticName="UtenteChiusura" DisplayName="Utente chiusura" Required="FALSE" MaxLength="255" />
+            <Field Type="Number" ID="{a0d059b8-b243-5bc4-bafe-ce2821a08847}" Name="NumeroRichieste" StaticName="NumeroRichieste" DisplayName="Numero richieste incluse" Required="FALSE" Decimals="0" Min="0" />
+            <Field Type="Number" ID="{11b73a74-26fd-5d18-82fc-5dd2c5a7a597}" Name="TotaleOreRiconosciute" StaticName="TotaleOreRiconosciute" DisplayName="Totale ore riconosciute" Required="FALSE" Decimals="2" Min="0" />
+            <Field Type="Number" ID="{98522501-440d-52c3-83eb-18790505a2b8}" Name="TotaleGettoni" StaticName="TotaleGettoni" DisplayName="Totale gettoni" Required="FALSE" Decimals="2" Min="0" />
+            <Field Type="Boolean" ID="{295353a2-9eba-563f-b9e0-8d8ac147ad56}" Name="FilePagheGenerato" StaticName="FilePagheGenerato" DisplayName="File paghe generato" Required="FALSE"><Default>0</Default></Field>
+            <Field Type="URL" ID="{4651cf29-652d-598c-9eb1-d798e3b9e24b}" Name="FilePagheUrl" StaticName="FilePagheUrl" DisplayName="File paghe" Required="FALSE" Format="Hyperlink" />
+            <Field Type="Number" ID="{3e3234c5-e658-5e46-9b6d-59136089d3b1}" Name="VersioneFile" StaticName="VersioneFile" DisplayName="Versione file paghe" Required="FALSE" Decimals="0" Min="0" />
+            <Field Type="Note" ID="{dbc1db1a-b1e7-514c-931a-0dcb59529243}" Name="NoteHR" StaticName="NoteHR" DisplayName="Note HR" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+            <Field Type="DateTime" ID="{55e168c0-6134-55c3-b839-fd2ee7650044}" Name="DataRiapertura" StaticName="DataRiapertura" DisplayName="Data riapertura" Required="FALSE" Format="DateTime" FriendlyDisplayFormat="Disabled" />
+            <Field Type="Text" ID="{2e0f9469-1fdf-5572-bfa7-9636e40d5452}" Name="UtenteRiapertura" StaticName="UtenteRiapertura" DisplayName="Utente riapertura" Required="FALSE" MaxLength="255" />
+            <Field Type="Note" ID="{96d5d9d3-f1ec-5746-bc66-1601baeafce9}" Name="MotivoRiapertura" StaticName="MotivoRiapertura" DisplayName="Motivo riapertura" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+          </pnp:Fields>
+          <pnp:FieldRefs>
+            <pnp:FieldRef ID="fa564e0f-0c70-4ab9-b863-0177e6ddd247" Name="Title" DisplayName="Periodo" Required="true" />
+          </pnp:FieldRefs>
+          <pnp:Security>
+            <pnp:BreakRoleInheritance CopyRoleAssignments="true" ClearSubscopes="true">
+              <pnp:RoleAssignment Principal="{everyonebutexternalusers}" RoleDefinition="{roledefinition:Reader}" />
+            </pnp:BreakRoleInheritance>
+          </pnp:Security>
+        </pnp:ListInstance>
+        <pnp:ListInstance Title="Registro modifiche" Description="Storico delle azioni di lavoratori, coordinatori, HR, amministratori e flussi." TemplateType="100" Url="Lists/RegistroModifiche" OnQuickLaunch="true" EnableVersioning="false" EnableFolderCreation="false" NoCrawl="true" ContentTypesEnabled="false" RemoveExistingContentTypes="false">
+          <pnp:Views RemoveExistingViews="true">
+            <View DisplayName="Tutte le azioni" DefaultView="TRUE" MobileView="TRUE" Type="HTML"><Query><OrderBy><FieldRef Name="Created" Ascending="FALSE" /></OrderBy></Query><ViewFields><FieldRef Name="LinkTitle" /><FieldRef Name="IdRichiesta" /><FieldRef Name="Campo" /><FieldRef Name="ValorePrecedente" /><FieldRef Name="ValoreNuovo" /><FieldRef Name="Ruolo" /><FieldRef Name="LoginAutore" /><FieldRef Name="Created" /></ViewFields><RowLimit Paged="TRUE">50</RowLimit></View>
+          </pnp:Views>
+          <pnp:Fields>
+            <Field Type="Number" ID="{bb7fbd2f-793d-5599-af43-0d09ea1db014}" Name="RichiestaRif" StaticName="RichiestaRif" DisplayName="ID elemento richiesta" Required="FALSE" Indexed="TRUE" Decimals="0" Min="0" />
+            <Field Type="Text" ID="{99a5fabd-64bb-5e9a-bb44-47d0d421ba31}" Name="IdRichiesta" StaticName="IdRichiesta" DisplayName="ID richiesta" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{9e323e81-c374-5b31-8c6a-47a5d4eb7f50}" Name="Tabella" StaticName="Tabella" DisplayName="Lista" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{c088601a-dde5-595a-acd7-3fb7106700ce}" Name="IdRecord" StaticName="IdRecord" DisplayName="ID elemento" Required="FALSE" MaxLength="255" />
+            <Field Type="Text" ID="{cb2bef72-45d3-5b5e-a095-be3eca1e2954}" Name="Campo" StaticName="Campo" DisplayName="Campo" Required="FALSE" MaxLength="255" />
+            <Field Type="Note" ID="{672d1d65-3fb7-5358-aa5d-9e47a7e72caa}" Name="ValorePrecedente" StaticName="ValorePrecedente" DisplayName="Valore precedente" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+            <Field Type="Note" ID="{20e93215-7420-5bcb-aecc-2886da924504}" Name="ValoreNuovo" StaticName="ValoreNuovo" DisplayName="Valore nuovo" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+            <Field Type="Choice" ID="{d902dfa9-a0b7-5132-b0d7-418bd592067c}" Name="Ruolo" StaticName="Ruolo" DisplayName="Ruolo" Required="FALSE" Format="Dropdown" FillInChoice="FALSE"><CHOICES><CHOICE>Lavoratore</CHOICE><CHOICE>Coordinatore</CHOICE><CHOICE>Formazione HR</CHOICE><CHOICE>Amministratore</CHOICE><CHOICE>Sistema</CHOICE></CHOICES></Field>
+            <Field Type="Text" ID="{3cc1562c-5e1d-5d18-9fa3-439c5b77b33e}" Name="LoginAutore" StaticName="LoginAutore" DisplayName="Login autore" Required="FALSE" Indexed="TRUE" MaxLength="255" />
+            <Field Type="Note" ID="{289296ba-4aa1-59fc-9c67-67f96e624425}" Name="Nota" StaticName="Nota" DisplayName="Nota" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+          </pnp:Fields>
+          <pnp:FieldRefs>
+            <pnp:FieldRef ID="fa564e0f-0c70-4ab9-b863-0177e6ddd247" Name="Title" DisplayName="Azione" Required="true" />
+          </pnp:FieldRefs>
+        </pnp:ListInstance>
+        <pnp:ListInstance Title="Ruoli applicativi" Description="Utenti con ruolo Formazione HR o Amministratore. Il flusso F9 allinea i gruppi SharePoint." TemplateType="100" Url="Lists/RuoliApplicativi" OnQuickLaunch="true" EnableVersioning="true" MaxVersionLimit="100" EnableFolderCreation="false" NoCrawl="true" ContentTypesEnabled="false" RemoveExistingContentTypes="false">
+          <pnp:Views RemoveExistingViews="true">
+            <View DisplayName="Tutti i ruoli" DefaultView="TRUE" MobileView="TRUE" Type="HTML"><Query><OrderBy><FieldRef Name="Title" Ascending="TRUE" /></OrderBy></Query><ViewFields><FieldRef Name="LinkTitle" /><FieldRef Name="Utente" /><FieldRef Name="Ruolo" /><FieldRef Name="Attivo" /></ViewFields><RowLimit Paged="TRUE">50</RowLimit></View>
+          </pnp:Views>
+          <pnp:Fields>
+            <Field Type="User" ID="{681f65de-dd9b-5ee0-8df5-94af30d7b369}" Name="Utente" StaticName="Utente" DisplayName="Utente" Required="FALSE" List="UserInfo" ShowField="ImnName" UserSelectionMode="PeopleOnly" UserSelectionScope="0" />
+            <Field Type="Choice" ID="{3dac1a95-3ba9-5849-acd3-2f4591522492}" Name="Ruolo" StaticName="Ruolo" DisplayName="Ruolo" Required="TRUE" Format="Dropdown" FillInChoice="FALSE"><CHOICES><CHOICE>Formazione HR</CHOICE><CHOICE>Amministratore</CHOICE></CHOICES></Field>
+            <Field Type="Boolean" ID="{a6bca987-765f-547c-b52f-ae133ff09ba7}" Name="Attivo" StaticName="Attivo" DisplayName="Attivo" Required="FALSE"><Default>1</Default></Field>
+            <Field Type="Note" ID="{47923c03-ddde-5d90-8d87-dfd3b3744bc1}" Name="NoteRuolo" StaticName="NoteRuolo" DisplayName="Note" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+          </pnp:Fields>
+          <pnp:FieldRefs>
+            <pnp:FieldRef ID="fa564e0f-0c70-4ab9-b863-0177e6ddd247" Name="Title" DisplayName="Login" Required="true" />
+          </pnp:FieldRefs>
+        </pnp:ListInstance>
+        <pnp:ListInstance Title="Configurazione" Description="Parametri letti dai flussi (chiave/valore)." TemplateType="100" Url="Lists/Configurazione" OnQuickLaunch="true" EnableVersioning="true" MaxVersionLimit="100" EnableFolderCreation="false" NoCrawl="true" ContentTypesEnabled="false" RemoveExistingContentTypes="false">
+          <pnp:Views RemoveExistingViews="true">
+            <View DisplayName="Tutti i parametri" DefaultView="TRUE" MobileView="TRUE" Type="HTML"><Query><OrderBy><FieldRef Name="Title" Ascending="TRUE" /></OrderBy></Query><ViewFields><FieldRef Name="LinkTitle" /><FieldRef Name="Valore" /><FieldRef Name="Descrizione" /></ViewFields><RowLimit Paged="TRUE">50</RowLimit></View>
+          </pnp:Views>
+          <pnp:Fields>
+            <Field Type="Note" ID="{4cf20352-304e-5fb5-9430-f6c804a25363}" Name="Valore" StaticName="Valore" DisplayName="Valore" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+            <Field Type="Note" ID="{da46a590-8502-58b7-bbfb-698d03478181}" Name="Descrizione" StaticName="Descrizione" DisplayName="Descrizione" Required="FALSE" NumLines="6" RichText="FALSE" AppendOnly="FALSE" UnlimitedLengthInDocumentLibrary="FALSE" />
+          </pnp:Fields>
+          <pnp:FieldRefs>
+            <pnp:FieldRef ID="fa564e0f-0c70-4ab9-b863-0177e6ddd247" Name="Title" DisplayName="Chiave" Required="true" />
+          </pnp:FieldRefs>
+          <pnp:DataRows KeyColumn="Title" UpdateBehavior="Skip">
+            <pnp:DataRow>
+              <pnp:DataValue FieldName="Title">AppUrl</pnp:DataValue>
+              <pnp:DataValue FieldName="Valore">https://apps.powerapps.com/play/e/&lt;ID-AMBIENTE&gt;/a/&lt;ID-APP&gt;?tenantId=&lt;ID-TENANT&gt;</pnp:DataValue>
+              <pnp:DataValue FieldName="Descrizione">Collegamento web dell'app: i flussi aggiungono &amp;richiesta=&lt;ID&gt; per aprire direttamente una richiesta</pnp:DataValue>
+            </pnp:DataRow>
+            <pnp:DataRow>
+              <pnp:DataValue FieldName="Title">EmailHR</pnp:DataValue>
+              <pnp:DataValue FieldName="Valore">formazione@societadolce.it</pnp:DataValue>
+              <pnp:DataValue FieldName="Descrizione">Casella dell'Ufficio HR/Formazione che riceve segnalazioni e riepiloghi</pnp:DataValue>
+            </pnp:DataRow>
+            <pnp:DataRow>
+              <pnp:DataValue FieldName="Title">MittenteEmail</pnp:DataValue>
+              <pnp:DataValue FieldName="Valore"></pnp:DataValue>
+              <pnp:DataValue FieldName="Descrizione">Facoltativo: cassetta condivisa da cui inviare le e-mail (l'account di servizio deve avere il permesso Invia come). Vuoto = account di servizio</pnp:DataValue>
+            </pnp:DataRow>
+            <pnp:DataRow>
+              <pnp:DataValue FieldName="Title">DestinatariPayroll</pnp:DataValue>
+              <pnp:DataValue FieldName="Valore">paghe@societadolce.it;formazione@societadolce.it</pnp:DataValue>
+              <pnp:DataValue FieldName="Descrizione">Destinatari del collegamento al file paghe, separati da punto e virgola</pnp:DataValue>
+            </pnp:DataRow>
+            <pnp:DataRow>
+              <pnp:DataValue FieldName="Title">SitoUrl</pnp:DataValue>
+              <pnp:DataValue FieldName="Valore">https://societadolce.sharepoint.com/sites/GestioneFormazione</pnp:DataValue>
+              <pnp:DataValue FieldName="Descrizione">URL di questo sito</pnp:DataValue>
+            </pnp:DataRow>
+            <pnp:DataRow>
+              <pnp:DataValue FieldName="Title">AccountServizio</pnp:DataValue>
+              <pnp:DataValue FieldName="Valore">svc-formazione@societadolce.it</pnp:DataValue>
+              <pnp:DataValue FieldName="Descrizione">Account di servizio dei flussi: non viene mai tolto dai gruppi dal flusso F9</pnp:DataValue>
+            </pnp:DataRow>
+            <pnp:DataRow>
+              <pnp:DataValue FieldName="Title">LinkResetPassword</pnp:DataValue>
+              <pnp:DataValue FieldName="Valore">https://password.societadolce.it/</pnp:DataValue>
+              <pnp:DataValue FieldName="Descrizione">Pagina di reimpostazione della password</pnp:DataValue>
+            </pnp:DataRow>
+            <pnp:DataRow>
+              <pnp:DataValue FieldName="Title">Festivita</pnp:DataValue>
+              <pnp:DataValue FieldName="Valore">["2026-01-01","2026-01-06","2026-04-06","2026-04-25","2026-05-01","2026-06-02","2026-08-15","2026-11-01","2026-12-08","2026-12-25","2026-12-26","2027-01-01","2027-01-06","2027-03-29","2027-04-25","2027-05-01","2027-06-02","2027-08-15","2027-11-01","2027-12-08","2027-12-25","2027-12-26"]</pnp:DataValue>
+              <pnp:DataValue FieldName="Descrizione">Giorni festivi (AAAA-MM-GG) esclusi dal conteggio dei giorni lavorativi. Aggiungere il patrono locale e aggiornare ogni anno</pnp:DataValue>
+            </pnp:DataRow>
+          </pnp:DataRows>
+        </pnp:ListInstance>
+        <pnp:ListInstance Title="Allegati formazione" Description="Attestati e documenti delle richieste. Una cartella per coordinatore, condivisa in sola lettura con il coordinatore dal flusso API03." TemplateType="101" Url="AllegatiFormazione" OnQuickLaunch="true" EnableVersioning="true" MaxVersionLimit="100" EnableFolderCreation="true" NoCrawl="true" ContentTypesEnabled="false" RemoveExistingContentTypes="false">
+          <pnp:Fields>
+            <Field Type="Number" ID="{76d6c288-b405-57a6-961e-1165264c2316}" Name="RichiestaRif" StaticName="RichiestaRif" DisplayName="ID elemento richiesta" Required="FALSE" Indexed="TRUE" Decimals="0" Min="0" />
+            <Field Type="Text" ID="{57eae2b0-119c-5aec-a230-4c15d6287e48}" Name="IdRichiesta" StaticName="IdRichiesta" DisplayName="ID richiesta" Required="FALSE" MaxLength="255" />
+            <Field Type="Choice" ID="{fdbe1dd7-4fbd-560c-bc4d-8294eddd6dd2}" Name="TipoAllegato" StaticName="TipoAllegato" DisplayName="Tipo allegato" Required="FALSE" Format="Dropdown" FillInChoice="FALSE"><CHOICES><CHOICE>Attestato</CHOICE><CHOICE>Altra documentazione</CHOICE></CHOICES></Field>
+            <Field Type="Text" ID="{11eae708-912f-5e3e-bb9e-976eef850c61}" Name="LavoratoreLogin" StaticName="LavoratoreLogin" DisplayName="Login lavoratore" Required="FALSE" Indexed="TRUE" MaxLength="255" />
+          </pnp:Fields>
+        </pnp:ListInstance>
+        <pnp:ListInstance Title="File paghe" Description="File CSV mensili per l'Ufficio Paghe." TemplateType="101" Url="FilePaghe" OnQuickLaunch="true" EnableVersioning="true" MaxVersionLimit="100" EnableFolderCreation="true" NoCrawl="true" ContentTypesEnabled="false" RemoveExistingContentTypes="false">
+          <pnp:Fields>
+            <Field Type="Text" ID="{45b9ff44-4485-57ee-a663-48a08e106963}" Name="Periodo" StaticName="Periodo" DisplayName="Periodo" Required="FALSE" Indexed="TRUE" MaxLength="7" />
+            <Field Type="Number" ID="{ab2e39c7-fae8-51d2-ba95-d5d6944a4017}" Name="NumeroRichieste" StaticName="NumeroRichieste" DisplayName="Numero richieste" Required="FALSE" Decimals="0" Min="0" />
+          </pnp:Fields>
+          <pnp:Security>
+            <pnp:BreakRoleInheritance CopyRoleAssignments="false" ClearSubscopes="true">
+              <pnp:RoleAssignment Principal="{associatedownergroup}" RoleDefinition="{roledefinition:Administrator}" />
+              <pnp:RoleAssignment Principal="Formazione - HR" RoleDefinition="{roledefinition:Reader}" />
+              <pnp:RoleAssignment Principal="Formazione - Paghe" RoleDefinition="{roledefinition:Reader}" />
+            </pnp:BreakRoleInheritance>
+          </pnp:Security>
+        </pnp:ListInstance>
+      </pnp:Lists>
+    </pnp:ProvisioningTemplate>
+  </pnp:Templates>
+</pnp:Provisioning>
