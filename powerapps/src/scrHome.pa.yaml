@@ -1,0 +1,1785 @@
+# =============================================================================
+#  Gestione ore formazione – Società Dolce · schermata scrHome
+#  1 – Home page con contenuto per ruolo (tutti)
+# -----------------------------------------------------------------------------
+#  Formato: sorgente YAML di Power Apps Studio (Copia codice / Incolla codice).
+#  Come incollarla: vedere powerapps/README.md. Le formule sono in notazione
+#  inglese (separatore "," e concatenazione ";"): Studio in italiano le mostra
+#  con ";" e ";;" automaticamente.
+#  Dati: lavoratore SDF_API02; coordinatore SDF_API05; HR conteggi diretti su 'Richieste formazione' (solo se isHR).
+# =============================================================================
+Screens:
+  scrHome:
+    Properties:
+      Fill: =colSfondo
+      OnVisible: |-
+        =Set(varMenuAperto, false);
+        If(
+            !varProfiloCaricato,
+            Navigate(scrAccesso, ScreenTransition.None),
+            isLavoratore && !recProfilo.profiloCompleto,
+            Navigate(scrProfilo, ScreenTransition.None),
+            Set(varCaricamento, true);
+            Set(varMessaggioCaricamento, "Caricamento della pagina iniziale…");
+            // Lavoratore: le proprie richieste tramite SDF_API02 (una volta per sessione, poi pulsante Aggiorna)
+            If(
+                isLavoratore && !varMieCaricate,
+                With(
+                    {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                    If(
+                        rm.esito = "OK",
+                        Set(varJsonMieRichieste, rm.dati);
+                        Set(varMieCaricate, true),
+                        Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                    )
+                )
+            );
+        // Coordinatore: richieste del team dell'anno in corso tramite SDF_API05
+        If(
+            isCoord && !varTeamCaricato,
+            Set(varAnnoTeam, Year(Today()));
+            Set(varMeseTeam, 0);
+                With(
+                    {rt: IfError(SDF_API05_RichiesteTeam.Run(varAnnoTeam, varMeseTeam), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                    If(
+                        rt.esito = "OK",
+                        Set(varJsonTeam, rt.dati);
+                        Set(varTeamCaricato, true),
+                        Notify("Non è stato possibile caricare le richieste del team. " & rt.messaggio, NotificationType.Error)
+                    )
+                )
+            );
+        // HR / Amministratore: conteggi con lettura diretta e filtri delegabili (massimo 2000 righe per conteggio)
+        If(
+            isHR,
+                ClearCollect(colHomeHrValidare, ShowColumns(Filter('Richieste formazione', 'Stato richiesta'.Value = "In attesa di validazione HR"), ID));
+                ClearCollect(colHomeHrCoord, ShowColumns(Filter('Richieste formazione', 'Stato richiesta'.Value = "In attesa del coordinatore"), ID));
+                ClearCollect(
+                    colHomeHrIntegr,
+                    ShowColumns(
+                        Filter(
+                            'Richieste formazione',
+                            'Stato richiesta'.Value = "Integrazione richiesta dal coordinatore" || 'Stato richiesta'.Value = "Integrazione richiesta da HR"
+                        ),
+                        ID
+                    )
+                );
+                ClearCollect(
+                    colHomeHrSolleciti,
+                    ShowColumns(Filter('Richieste formazione', 'Stato richiesta'.Value = "In attesa del coordinatore", 'Sollecito segnalato a HR' = true), ID)
+                )
+            );
+            Set(varCaricamento, false)
+        )
+    Children:
+      - hom_conRadice:
+          Control: GroupContainer@1.3.0
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutJustifyContent: =LayoutJustifyContent.Start
+            LayoutGap: =0
+            DropShadow: =DropShadow.None
+            Fill: =colSfondo
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+          Children:
+            - hom_conHeader:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.None
+                  Fill: =colPrimario
+                  Height: =56
+                  FillPortions: =0
+                  PaddingLeft: =12
+                  PaddingRight: =16
+                Children:
+                  - hom_icoMenu:
+                      Control: Classic/Icon@2.5.0
+                      Properties:
+                        Icon: =Icon.Hamburger
+                        OnSelect: =Set(varMenuAperto, !varMenuAperto)
+                        Color: =Color.White
+                        Tooltip: |-
+                          ="Apri o chiudi il menu"
+                        Width: =40
+                        Height: =40
+                        PaddingTop: =4
+                        PaddingBottom: =4
+                        PaddingLeft: =4
+                        PaddingRight: =4
+                        FillPortions: =0
+                        Visible: =isMobile
+                  - hom_lblTitoloApp:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Gestione ore formazione"
+                        Size: =16
+                        Color: =Color.White
+                        FontWeight: =FontWeight.Semibold
+                        FillPortions: =1
+                        Height: =40
+                        LayoutMinWidth: =150
+                  - hom_lblUtente:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =User().FullName & If(haRuolo, " · " & ruoloApp, "")
+                        Size: =11
+                        Color: =Color.White
+                        Align: =Align.Right
+                        Width: =340
+                        Height: =40
+                        FillPortions: =0
+                        Visible: =!isMobile
+            - hom_conCorpo:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =0
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(0, 0, 0, 0)
+                  FillPortions: =1
+                Children:
+                  - hom_conMenu:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =0
+                        DropShadow: =DropShadow.None
+                        Fill: =colSuperficie
+                        Width: =If(isMobile, Parent.Width, 230)
+                        FillPortions: =0
+                        Visible: =!isMobile || varMenuAperto
+                        BorderColor: =colBordo
+                        BorderThickness: =1
+                        PaddingTop: =8
+                      Children:
+                        - hom_lblMenuUtente:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: =User().FullName & Char(10) & ruoloApp
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Visible: =isMobile
+                              Height: =48
+                              FillPortions: =0
+                              PaddingLeft: =12
+                              Wrap: =true
+                        - hom_galMenu:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =tblMenu
+                              TemplateSize: =48
+                              TemplatePadding: =0
+                              ShowScrollbar: =false
+                              BorderColor: =colBordo
+                              BorderThickness: =0
+                              Fill: =RGBA(0, 0, 0, 0)
+                              TemplateFill: =If(ThisItem.Chiave = "home", colPrimarioChiaro, RGBA(0, 0, 0, 0))
+                              OnSelect: |-
+                                =Set(varMenuAperto, false);
+                                Switch(
+                                    ThisItem.Chiave,
+                                    "home", Navigate(scrHome, ScreenTransition.None),
+                                    "mie", Navigate(scrMieRichieste, ScreenTransition.None),
+                                    "nuova", Set(varIdModifica, 0); Navigate(scrRichiesta, ScreenTransition.None),
+                                    "team", Navigate(scrTeam, ScreenTransition.None),
+                                    "validazione", Navigate(scrValidazioneHR, ScreenTransition.None),
+                                    "riepilogo", Navigate(scrRiepilogo, ScreenTransition.None),
+                                    "chiusura", Navigate(scrChiusura, ScreenTransition.None),
+                                    "admin", Navigate(scrAdmin, ScreenTransition.None),
+                                    "profilo", Navigate(scrProfilo, ScreenTransition.None)
+                                )
+                              DisplayMode: =If(false, DisplayMode.Disabled, DisplayMode.Edit)
+                              FillPortions: =1
+                            Children:
+                              - hom_icoVoceMenu:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =ThisItem.Icona
+                                    OnSelect: =Select(Parent)
+                                    Color: =If(ThisItem.Chiave = "home", colPrimario, colTestoSecondario)
+                                    Tooltip: |-
+                                      =""
+                                    Width: =28
+                                    Height: =28
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =12
+                                    Y: =(Parent.TemplateHeight - Self.Height) / 2
+                              - hom_lblVoceMenu:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Voce
+                                    Size: =12
+                                    Color: =If(ThisItem.Chiave = "home", colPrimario, colTesto)
+                                    FontWeight: =If(ThisItem.Chiave = "home", FontWeight.Semibold, FontWeight.Normal)
+                                    X: =48
+                                    Y: =0
+                                    Width: =Parent.TemplateWidth - 56
+                                    Height: =Parent.TemplateHeight
+                                    OnSelect: =Select(Parent)
+                              - hom_rctVoceAttiva:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colPrimario
+                                    Height: =Parent.TemplateHeight
+                                    X: =0
+                                    Y: =0
+                                    Width: =4
+                                    Visible: =ThisItem.Chiave = "home"
+                  - hom_conContenuto:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =12
+                        DropShadow: =DropShadow.None
+                        Fill: =colSfondo
+                        FillPortions: =1
+                        Visible: =!isMobile || !varMenuAperto
+                        PaddingTop: =16
+                        PaddingBottom: =16
+                        PaddingLeft: =If(isMobile, 12, 24)
+                        PaddingRight: =If(isMobile, 12, 24)
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                      Children:
+                        - hom_conTitolo:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              Height: =40
+                              FillPortions: =0
+                            Children:
+                              - hom_lblTitolo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Ciao " & Coalesce(recProfilo.nome, User().FullName)
+                                    Size: =18
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =36
+                                    FillPortions: =1
+                              - hom_icoAggiorna:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.Reload
+                                    OnSelect: |-
+                                      =Set(varCaricamento, true);
+                                      Set(varMessaggioCaricamento, "Aggiornamento in corso…");
+                                      If(
+                                          isLavoratore,
+                                          With(
+                                              {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                              If(
+                                                  rm.esito = "OK",
+                                                  Set(varJsonMieRichieste, rm.dati);
+                                                  Set(varMieCaricate, true),
+                                                  Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                                              )
+                                          )
+                                      );
+                                      If(
+                                          isCoord,
+                                          With(
+                                              {rt: IfError(SDF_API05_RichiesteTeam.Run(varAnnoTeam, varMeseTeam), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                              If(
+                                                  rt.esito = "OK",
+                                                  Set(varJsonTeam, rt.dati);
+                                                  Set(varTeamCaricato, true),
+                                                  Notify("Non è stato possibile caricare le richieste del team. " & rt.messaggio, NotificationType.Error)
+                                              )
+                                          )
+                                      );
+                                      If(
+                                          isHR,
+                                          ClearCollect(colHomeHrValidare, ShowColumns(Filter('Richieste formazione', 'Stato richiesta'.Value = "In attesa di validazione HR"), ID));
+                                          ClearCollect(colHomeHrCoord, ShowColumns(Filter('Richieste formazione', 'Stato richiesta'.Value = "In attesa del coordinatore"), ID));
+                                          ClearCollect(
+                                              colHomeHrIntegr,
+                                              ShowColumns(
+                                                  Filter(
+                                                      'Richieste formazione',
+                                                      'Stato richiesta'.Value = "Integrazione richiesta dal coordinatore" || 'Stato richiesta'.Value = "Integrazione richiesta da HR"
+                                                  ),
+                                                  ID
+                                              )
+                                          );
+                                          ClearCollect(
+                                              colHomeHrSolleciti,
+                                              ShowColumns(Filter('Richieste formazione', 'Stato richiesta'.Value = "In attesa del coordinatore", 'Sollecito segnalato a HR' = true), ID)
+                                          )
+                                      );
+                                      Set(varCaricamento, false)
+                                    Color: =colPrimario
+                                    Tooltip: |-
+                                      ="Aggiorna i dati"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    FillPortions: =0
+                        - hom_lblRuolo:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Ruolo nell’applicativo: " & ruoloApp & If(testoRuoli <> ruoloApp, " · funzioni abilitate: " & testoRuoli, "")
+                              Size: =12
+                              Color: =colTestoSecondario
+                              Height: =24
+                              Wrap: =true
+                              FillPortions: =0
+                        - hom_lblSezLav:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="La mia formazione"
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                              Visible: =isLavoratore
+                        - hom_lblAvvisoIntegr:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Hai " & CountRows(Filter(colMieRichieste, gruppo = "integrazione")) & " richieste per cui è stata chiesta un’integrazione: aprile da «Le mie richieste», correggi e reinvia."
+                              Size: =12
+                              Color: =Color.White
+                              FontWeight: =FontWeight.Semibold
+                              Fill: =colAvviso
+                              PaddingLeft: =12
+                              Height: =40
+                              Wrap: =true
+                              FillPortions: =0
+                              Visible: =isLavoratore && CountRows(Filter(colMieRichieste, gruppo = "integrazione")) > 0
+                              OnSelect: =Set(varFiltroGruppoMie, "attesa_integr"); Navigate(scrMieRichieste, ScreenTransition.None)
+                        - hom_conTessereLav:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              FillPortions: =0
+                              Height: =If(isMobile, 4 * 132, 120)
+                              Visible: =isLavoratore
+                            Children:
+                              - hom_conTesNuova:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =170
+                                    Height: =120
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - hom_icoTesNuova:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Add
+                                          OnSelect: =false
+                                          Color: =colPrimario
+                                          Tooltip: |-
+                                            =""
+                                          Width: =36
+                                          Height: =36
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          X: =16
+                                          Y: =16
+                                    - hom_lblTesValoreNuova:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="+"
+                                          Size: =24
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =64
+                                          Y: =10
+                                          Width: =Parent.Width - 72
+                                          Height: =44
+                                    - hom_lblTesTitoloNuova:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Inserisci formazione"
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =16
+                                          Y: =58
+                                          Width: =Parent.Width - 24
+                                          Height: =24
+                                    - hom_lblTesSottoNuova:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Nuova richiesta di riconoscimento delle ore"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          X: =16
+                                          Y: =82
+                                          Width: =Parent.Width - 24
+                                          Height: =30
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                    - hom_btnTesNuova:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            =""
+                                          OnSelect: =Set(varIdModifica, 0); Navigate(scrRichiesta, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =Parent.Height
+                                          Width: =Parent.Width
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          Color: =colPrimario
+                                          HoverFill: =RGBA(0, 94, 125, 0.06)
+                                          PressedFill: =RGBA(0, 94, 125, 0.12)
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =0
+                                          X: =0
+                                          Y: =0
+                                          Tooltip: |-
+                                            ="Inserisci formazione"
+                              - hom_conTesApprovata:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =170
+                                    Height: =120
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - hom_icoTesApprovata:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.CheckBadge
+                                          OnSelect: =false
+                                          Color: =colSuccesso
+                                          Tooltip: |-
+                                            =""
+                                          Width: =36
+                                          Height: =36
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          X: =16
+                                          Y: =16
+                                    - hom_lblTesValoreApprovata:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(CountRows(Filter(colMieRichieste, gruppo = "approvata")))
+                                          Size: =24
+                                          Color: =colSuccesso
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =64
+                                          Y: =10
+                                          Width: =Parent.Width - 72
+                                          Height: =44
+                                    - hom_lblTesTitoloApprovata:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Formazione approvata"
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =16
+                                          Y: =58
+                                          Width: =Parent.Width - 24
+                                          Height: =24
+                                    - hom_lblTesSottoApprovata:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Ore riconosciute nel " & Year(Today()) & ": " & Text(Sum(Filter(colMieRichieste, gruppo = "approvata" && annoCompetenza = Year(Today())), oreRetribuiteHR + oreGettoneHR), "[$-en-US]0.##")
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          X: =16
+                                          Y: =82
+                                          Width: =Parent.Width - 24
+                                          Height: =30
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                    - hom_btnTesApprovata:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            =""
+                                          OnSelect: =Set(varFiltroGruppoMie, "approvata"); Navigate(scrMieRichieste, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =Parent.Height
+                                          Width: =Parent.Width
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          Color: =colPrimario
+                                          HoverFill: =RGBA(0, 94, 125, 0.06)
+                                          PressedFill: =RGBA(0, 94, 125, 0.12)
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =0
+                                          X: =0
+                                          Y: =0
+                                          Tooltip: |-
+                                            ="Formazione approvata"
+                              - hom_conTesAttesa:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =170
+                                    Height: =120
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - hom_icoTesAttesa:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Clock
+                                          OnSelect: =false
+                                          Color: =If(CountRows(Filter(colMieRichieste, gruppo = "integrazione")) > 0, colAvviso, colInfo)
+                                          Tooltip: |-
+                                            =""
+                                          Width: =36
+                                          Height: =36
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          X: =16
+                                          Y: =16
+                                    - hom_lblTesValoreAttesa:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(CountRows(Filter(colMieRichieste, gruppo = "attesa" || gruppo = "integrazione")))
+                                          Size: =24
+                                          Color: =If(CountRows(Filter(colMieRichieste, gruppo = "integrazione")) > 0, colAvviso, colInfo)
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =64
+                                          Y: =10
+                                          Width: =Parent.Width - 72
+                                          Height: =44
+                                    - hom_lblTesTitoloAttesa:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="In attesa / integrazioni richieste"
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =16
+                                          Y: =58
+                                          Width: =Parent.Width - 24
+                                          Height: =24
+                                    - hom_lblTesSottoAttesa:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="di cui " & CountRows(Filter(colMieRichieste, gruppo = "integrazione")) & " da integrare · " & CountRows(Filter(colMieRichieste, gruppo = "bozza")) & " bozze"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          X: =16
+                                          Y: =82
+                                          Width: =Parent.Width - 24
+                                          Height: =30
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                    - hom_btnTesAttesa:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            =""
+                                          OnSelect: =Set(varFiltroGruppoMie, "attesa_integr"); Navigate(scrMieRichieste, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =Parent.Height
+                                          Width: =Parent.Width
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          Color: =colPrimario
+                                          HoverFill: =RGBA(0, 94, 125, 0.06)
+                                          PressedFill: =RGBA(0, 94, 125, 0.12)
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =0
+                                          X: =0
+                                          Y: =0
+                                          Tooltip: |-
+                                            ="In attesa / integrazioni richieste"
+                              - hom_conTesRiepilogo:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =170
+                                    Height: =120
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - hom_icoTesRiepilogo:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.DetailList
+                                          OnSelect: =false
+                                          Color: =colPrimario
+                                          Tooltip: |-
+                                            =""
+                                          Width: =36
+                                          Height: =36
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          X: =16
+                                          Y: =16
+                                    - hom_lblTesValoreRiepilogo:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(Year(Today()))
+                                          Size: =24
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =64
+                                          Y: =10
+                                          Width: =Parent.Width - 72
+                                          Height: =44
+                                    - hom_lblTesTitoloRiepilogo:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Riepilogo formazione"
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =16
+                                          Y: =58
+                                          Width: =Parent.Width - 24
+                                          Height: =24
+                                    - hom_lblTesSottoRiepilogo:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Totali delle tue ore per mese e per stato"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          X: =16
+                                          Y: =82
+                                          Width: =Parent.Width - 24
+                                          Height: =30
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                    - hom_btnTesRiepilogo:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            =""
+                                          OnSelect: =Set(varPerimetroRiep, "personale"); Navigate(scrRiepilogo, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =Parent.Height
+                                          Width: =Parent.Width
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          Color: =colPrimario
+                                          HoverFill: =RGBA(0, 94, 125, 0.06)
+                                          PressedFill: =RGBA(0, 94, 125, 0.12)
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =0
+                                          X: =0
+                                          Y: =0
+                                          Tooltip: |-
+                                            ="Riepilogo formazione"
+                        - hom_lblSezCoord:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Il mio team (coordinatore)"
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                              Visible: =isCoord
+                        - hom_conTessereCoord:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              FillPortions: =0
+                              Height: =If(isMobile, 3 * 132, 120)
+                              Visible: =isCoord
+                            Children:
+                              - hom_conTesTeamAperte:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =170
+                                    Height: =120
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - hom_icoTesTeamAperte:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.People
+                                          OnSelect: =false
+                                          Color: =colPrimario
+                                          Tooltip: |-
+                                            =""
+                                          Width: =36
+                                          Height: =36
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          X: =16
+                                          Y: =16
+                                    - hom_lblTesValoreTeamAperte:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(CountRows(Filter(colRichiesteTeam, gruppo = "attesa" || gruppo = "integrazione")))
+                                          Size: =24
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =64
+                                          Y: =10
+                                          Width: =Parent.Width - 72
+                                          Height: =44
+                                    - hom_lblTesTitoloTeamAperte:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Richieste aperte del team"
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =16
+                                          Y: =58
+                                          Width: =Parent.Width - 24
+                                          Height: =24
+                                    - hom_lblTesSottoTeamAperte:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Periodo " & If(varMeseTeam = 0, "anno " & varAnnoTeam, Text(varMeseTeam, "00") & "/" & varAnnoTeam) & ": in attesa o in integrazione"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          X: =16
+                                          Y: =82
+                                          Width: =Parent.Width - 24
+                                          Height: =30
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                    - hom_btnTesTeamAperte:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            =""
+                                          OnSelect: =Navigate(scrTeam, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =Parent.Height
+                                          Width: =Parent.Width
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          Color: =colPrimario
+                                          HoverFill: =RGBA(0, 94, 125, 0.06)
+                                          PressedFill: =RGBA(0, 94, 125, 0.12)
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =0
+                                          X: =0
+                                          Y: =0
+                                          Tooltip: |-
+                                            ="Richieste aperte del team"
+                              - hom_conTesTeamDaApprovare:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =170
+                                    Height: =120
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - hom_icoTesTeamDaApprovare:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Check
+                                          OnSelect: =false
+                                          Color: =If(CountRows(Filter(colRichiesteTeam, stato = "In attesa del coordinatore")) > 0, colAvviso, colSuccesso)
+                                          Tooltip: |-
+                                            =""
+                                          Width: =36
+                                          Height: =36
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          X: =16
+                                          Y: =16
+                                    - hom_lblTesValoreTeamDaApprovare:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(CountRows(Filter(colRichiesteTeam, stato = "In attesa del coordinatore")))
+                                          Size: =24
+                                          Color: =If(CountRows(Filter(colRichiesteTeam, stato = "In attesa del coordinatore")) > 0, colAvviso, colSuccesso)
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =64
+                                          Y: =10
+                                          Width: =Parent.Width - 72
+                                          Height: =44
+                                    - hom_lblTesTitoloTeamDaApprovare:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Da approvare"
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =16
+                                          Y: =58
+                                          Width: =Parent.Width - 24
+                                          Height: =24
+                                    - hom_lblTesSottoTeamDaApprovare:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="di cui " & CountRows(Filter(colRichiesteTeam, stato = "In attesa del coordinatore" && giorniAttesa >= 3)) & " in attesa da 3 o più giorni lavorativi"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          X: =16
+                                          Y: =82
+                                          Width: =Parent.Width - 24
+                                          Height: =30
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                    - hom_btnTesTeamDaApprovare:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            =""
+                                          OnSelect: =Navigate(scrTeam, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =Parent.Height
+                                          Width: =Parent.Width
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          Color: =colPrimario
+                                          HoverFill: =RGBA(0, 94, 125, 0.06)
+                                          PressedFill: =RGBA(0, 94, 125, 0.12)
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =0
+                                          X: =0
+                                          Y: =0
+                                          Tooltip: |-
+                                            ="Da approvare"
+                              - hom_conTesTeamIntegr:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =170
+                                    Height: =120
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - hom_icoTesTeamIntegr:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Message
+                                          OnSelect: =false
+                                          Color: =colPrimario
+                                          Tooltip: |-
+                                            =""
+                                          Width: =36
+                                          Height: =36
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          X: =16
+                                          Y: =16
+                                    - hom_lblTesValoreTeamIntegr:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(CountRows(Filter(colRichiesteTeam, gruppo = "integrazione")))
+                                          Size: =24
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =64
+                                          Y: =10
+                                          Width: =Parent.Width - 72
+                                          Height: =44
+                                    - hom_lblTesTitoloTeamIntegr:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Integrazioni richieste"
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =16
+                                          Y: =58
+                                          Width: =Parent.Width - 24
+                                          Height: =24
+                                    - hom_lblTesSottoTeamIntegr:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="In attesa di correzione da parte dei lavoratori"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          X: =16
+                                          Y: =82
+                                          Width: =Parent.Width - 24
+                                          Height: =30
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                    - hom_btnTesTeamIntegr:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            =""
+                                          OnSelect: =Navigate(scrTeam, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =Parent.Height
+                                          Width: =Parent.Width
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          Color: =colPrimario
+                                          HoverFill: =RGBA(0, 94, 125, 0.06)
+                                          PressedFill: =RGBA(0, 94, 125, 0.12)
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =0
+                                          X: =0
+                                          Y: =0
+                                          Tooltip: |-
+                                            ="Integrazioni richieste"
+                        - hom_lblSezMessaggi:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Messaggi: integrazioni, possibili duplicati e richieste in attesa"
+                              Size: =11
+                              Color: =colTestoSecondario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =24
+                              FillPortions: =0
+                              Visible: =isCoord && hom_galMessaggi.Visible
+                        - hom_galMessaggi:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: |-
+                                =FirstN(
+                                    Sort(
+                                        Filter(
+                                            colRichiesteTeam,
+                                            gruppo = "integrazione" || possibileDuplicato || (stato = "In attesa del coordinatore" && giorniAttesa >= 3)
+                                        ),
+                                        modificato,
+                                        SortOrder.Descending
+                                    ),
+                                    6
+                                )
+                              TemplateSize: =40
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =Set(varIdDettaglio, ThisItem.id); Set(varDaLinkDiretto, false); Navigate(scrDettaglio, ScreenTransition.None)
+                              Height: =Max(1, CountRows(FirstN(     Sort(         Filter(             colRichiesteTeam,             gruppo = "integrazione" || possibileDuplicato || (stato = "In attesa del coordinatore" && giorniAttesa >= 3)         ),         modificato,         SortOrder.Descending     ),     6 ))) * 40 + 2
+                              FillPortions: =0
+                              Visible: =CountRows(FirstN(     Sort(         Filter(             colRichiesteTeam,             gruppo = "integrazione" || possibileDuplicato || (stato = "In attesa del coordinatore" && giorniAttesa >= 3)         ),         modificato,         SortOrder.Descending     ),     6 )) > 0
+                            Children:
+                              - hom_lblMessaggio:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =If(
+                                          ThisItem.possibileDuplicato, "⚠ Possibile duplicato: ",
+                                          ThisItem.gruppo = "integrazione", "✎ " & ThisItem.stato & ": ",
+                                          "⏰ In attesa da " & ThisItem.giorniAttesa & " giorni lavorativi: "
+                                      ) & ThisItem.nominativo & " – " & ThisItem.titolo & " del " & Text(ThisItem.dataSessione, "dd/mm/yyyy")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =12
+                                    Y: =0
+                                    Width: =Parent.TemplateWidth - 24
+                                    Height: =Parent.TemplateHeight
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - hom_rctMessaggioSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+                        - hom_lblSezHR:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Ufficio HR/Formazione"
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                              Visible: =isHR
+                        - hom_conTessereHR:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              FillPortions: =0
+                              Height: =If(isMobile, 4 * 132, 120)
+                              Visible: =isHR
+                            Children:
+                              - hom_conTesHrAperte:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =170
+                                    Height: =120
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - hom_icoTesHrAperte:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.DocumentWithContent
+                                          OnSelect: =false
+                                          Color: =colPrimario
+                                          Tooltip: |-
+                                            =""
+                                          Width: =36
+                                          Height: =36
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          X: =16
+                                          Y: =16
+                                    - hom_lblTesValoreHrAperte:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =If(CountRows(colHomeHrCoord) + CountRows(colHomeHrIntegr) + CountRows(colHomeHrValidare) >= 2000, "2000+", Text(CountRows(colHomeHrCoord) + CountRows(colHomeHrIntegr) + CountRows(colHomeHrValidare)))
+                                          Size: =24
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =64
+                                          Y: =10
+                                          Width: =Parent.Width - 72
+                                          Height: =44
+                                    - hom_lblTesTitoloHrAperte:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Richieste aperte"
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =16
+                                          Y: =58
+                                          Width: =Parent.Width - 24
+                                          Height: =24
+                                    - hom_lblTesSottoHrAperte:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="In attesa del coordinatore: " & If(CountRows(colHomeHrCoord) >= 2000, "2000+", Text(CountRows(colHomeHrCoord)))
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          X: =16
+                                          Y: =82
+                                          Width: =Parent.Width - 24
+                                          Height: =30
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                    - hom_btnTesHrAperte:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            =""
+                                          OnSelect: =Navigate(scrRiepilogo, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =Parent.Height
+                                          Width: =Parent.Width
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          Color: =colPrimario
+                                          HoverFill: =RGBA(0, 94, 125, 0.06)
+                                          PressedFill: =RGBA(0, 94, 125, 0.12)
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =0
+                                          X: =0
+                                          Y: =0
+                                          Tooltip: |-
+                                            ="Richieste aperte"
+                              - hom_conTesHrValidare:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =170
+                                    Height: =120
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - hom_icoTesHrValidare:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.CheckBadge
+                                          OnSelect: =false
+                                          Color: =If(CountRows(colHomeHrValidare) > 0, colAvviso, colSuccesso)
+                                          Tooltip: |-
+                                            =""
+                                          Width: =36
+                                          Height: =36
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          X: =16
+                                          Y: =16
+                                    - hom_lblTesValoreHrValidare:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =If(CountRows(colHomeHrValidare) >= 2000, "2000+", Text(CountRows(colHomeHrValidare)))
+                                          Size: =24
+                                          Color: =If(CountRows(colHomeHrValidare) > 0, colAvviso, colSuccesso)
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =64
+                                          Y: =10
+                                          Width: =Parent.Width - 72
+                                          Height: =44
+                                    - hom_lblTesTitoloHrValidare:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Da validare (HR)"
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =16
+                                          Y: =58
+                                          Width: =Parent.Width - 24
+                                          Height: =24
+                                    - hom_lblTesSottoHrValidare:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Approvate dai coordinatori, in attesa di validazione"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          X: =16
+                                          Y: =82
+                                          Width: =Parent.Width - 24
+                                          Height: =30
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                    - hom_btnTesHrValidare:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            =""
+                                          OnSelect: =Navigate(scrValidazioneHR, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =Parent.Height
+                                          Width: =Parent.Width
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          Color: =colPrimario
+                                          HoverFill: =RGBA(0, 94, 125, 0.06)
+                                          PressedFill: =RGBA(0, 94, 125, 0.12)
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =0
+                                          X: =0
+                                          Y: =0
+                                          Tooltip: |-
+                                            ="Da validare (HR)"
+                              - hom_conTesHrIntegr:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =170
+                                    Height: =120
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - hom_icoTesHrIntegr:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Message
+                                          OnSelect: =false
+                                          Color: =colPrimario
+                                          Tooltip: |-
+                                            =""
+                                          Width: =36
+                                          Height: =36
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          X: =16
+                                          Y: =16
+                                    - hom_lblTesValoreHrIntegr:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =If(CountRows(colHomeHrIntegr) >= 2000, "2000+", Text(CountRows(colHomeHrIntegr)))
+                                          Size: =24
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =64
+                                          Y: =10
+                                          Width: =Parent.Width - 72
+                                          Height: =44
+                                    - hom_lblTesTitoloHrIntegr:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Integrazioni richieste"
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =16
+                                          Y: =58
+                                          Width: =Parent.Width - 24
+                                          Height: =24
+                                    - hom_lblTesSottoHrIntegr:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Richieste rimandate ai lavoratori"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          X: =16
+                                          Y: =82
+                                          Width: =Parent.Width - 24
+                                          Height: =30
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                    - hom_btnTesHrIntegr:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            =""
+                                          OnSelect: =Navigate(scrRiepilogo, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =Parent.Height
+                                          Width: =Parent.Width
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          Color: =colPrimario
+                                          HoverFill: =RGBA(0, 94, 125, 0.06)
+                                          PressedFill: =RGBA(0, 94, 125, 0.12)
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =0
+                                          X: =0
+                                          Y: =0
+                                          Tooltip: |-
+                                            ="Integrazioni richieste"
+                              - hom_conTesHrSolleciti:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =170
+                                    Height: =120
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - hom_icoTesHrSolleciti:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Warning
+                                          OnSelect: =false
+                                          Color: =If(CountRows(colHomeHrSolleciti) > 0, colErrore, colSuccesso)
+                                          Tooltip: |-
+                                            =""
+                                          Width: =36
+                                          Height: =36
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          X: =16
+                                          Y: =16
+                                    - hom_lblTesValoreHrSolleciti:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =If(CountRows(colHomeHrSolleciti) >= 2000, "2000+", Text(CountRows(colHomeHrSolleciti)))
+                                          Size: =24
+                                          Color: =If(CountRows(colHomeHrSolleciti) > 0, colErrore, colSuccesso)
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =64
+                                          Y: =10
+                                          Width: =Parent.Width - 72
+                                          Height: =44
+                                    - hom_lblTesTitoloHrSolleciti:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Solleciti oltre 7 giorni"
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =16
+                                          Y: =58
+                                          Width: =Parent.Width - 24
+                                          Height: =24
+                                    - hom_lblTesSottoHrSolleciti:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Coordinatori in ritardo segnalati dal promemoria"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          X: =16
+                                          Y: =82
+                                          Width: =Parent.Width - 24
+                                          Height: =30
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                    - hom_btnTesHrSolleciti:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            =""
+                                          OnSelect: =Navigate(scrRiepilogo, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =Parent.Height
+                                          Width: =Parent.Width
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          Color: =colPrimario
+                                          HoverFill: =RGBA(0, 94, 125, 0.06)
+                                          PressedFill: =RGBA(0, 94, 125, 0.12)
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =0
+                                          X: =0
+                                          Y: =0
+                                          Tooltip: |-
+                                            ="Solleciti oltre 7 giorni"
+                        - hom_lblMsgHR:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Integrazioni richieste in corso: " & If(CountRows(colHomeHrIntegr) >= 2000, "2000+", Text(CountRows(colHomeHrIntegr))) & " · Solleciti segnalati dal promemoria (coordinatori in ritardo oltre 7 giorni): " & If(CountRows(colHomeHrSolleciti) >= 2000, "2000+", Text(CountRows(colHomeHrSolleciti)))
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Height: =36
+                              Wrap: =true
+                              FillPortions: =0
+                              Visible: =isHR
+                        - hom_lblSezLink:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Collegamenti rapidi"
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                        - hom_conCollegamenti:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              LayoutWrap: =true
+                              Height: =If(isMobile, 3 * 48, If(App.Width < 1200, 96, 48))
+                              FillPortions: =0
+                            Children:
+                              - hom_btnLinkReport:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Reportistica"
+                                    OnSelect: =Navigate(scrRiepilogo, ScreenTransition.None)
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =170
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =Color.White
+                                    Color: =colPrimario
+                                    HoverFill: =colPrimarioChiaro
+                                    PressedFill: =colPrimarioChiaro
+                                    HoverColor: =colPrimario
+                                    BorderColor: =colPrimario
+                                    BorderThickness: =1
+                                    Visible: =isCoord || isHR
+                              - hom_btnLinkTeam:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Richieste del team"
+                                    OnSelect: =Navigate(scrTeam, ScreenTransition.None)
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =180
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =Color.White
+                                    Color: =colPrimario
+                                    HoverFill: =colPrimarioChiaro
+                                    PressedFill: =colPrimarioChiaro
+                                    HoverColor: =colPrimario
+                                    BorderColor: =colPrimario
+                                    BorderThickness: =1
+                                    Visible: =isCoord
+                              - hom_btnLinkValidazione:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Validazione HR"
+                                    OnSelect: =Navigate(scrValidazioneHR, ScreenTransition.None)
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =170
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =Color.White
+                                    Color: =colPrimario
+                                    HoverFill: =colPrimarioChiaro
+                                    PressedFill: =colPrimarioChiaro
+                                    HoverColor: =colPrimario
+                                    BorderColor: =colPrimario
+                                    BorderThickness: =1
+                                    Visible: =isHR
+                              - hom_btnLinkPayroll:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Generazione file payroll"
+                                    OnSelect: =Navigate(scrChiusura, ScreenTransition.None)
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =220
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =Color.White
+                                    Color: =colPrimario
+                                    HoverFill: =colPrimarioChiaro
+                                    PressedFill: =colPrimarioChiaro
+                                    HoverColor: =colPrimario
+                                    BorderColor: =colPrimario
+                                    BorderThickness: =1
+                                    Visible: =isHR
+                              - hom_btnLinkAdmin:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Amministrazione"
+                                    OnSelect: =Navigate(scrAdmin, ScreenTransition.None)
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =170
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =Color.White
+                                    Color: =colPrimario
+                                    HoverFill: =colPrimarioChiaro
+                                    PressedFill: =colPrimarioChiaro
+                                    HoverColor: =colPrimario
+                                    BorderColor: =colPrimario
+                                    BorderThickness: =1
+                                    Visible: =isAdmin
+                              - hom_btnLinkMie:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Le mie richieste"
+                                    OnSelect: =Set(varFiltroGruppoMie, "tutti"); Navigate(scrMieRichieste, ScreenTransition.None)
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =170
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =Color.White
+                                    Color: =colPrimario
+                                    HoverFill: =colPrimarioChiaro
+                                    PressedFill: =colPrimarioChiaro
+                                    HoverColor: =colPrimario
+                                    BorderColor: =colPrimario
+                                    BorderThickness: =1
+                                    Visible: =isLavoratore
+      - hom_conCaricamento:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =varCaricamento
+          Children:
+            - hom_rctCaricamento:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =RGBA(255, 255, 255, 0.65)
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - hom_lblCaricamento:
+                Control: Label@2.5.1
+                Properties:
+                  Text: =Coalesce(varMessaggioCaricamento, "Caricamento in corso…") & Char(10) & "Attendere qualche secondo."
+                  Size: =14
+                  Color: =colPrimario
+                  FontWeight: =FontWeight.Semibold
+                  Align: =Align.Center
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(360, Parent.Width - 32)
+                  Height: =96
+                  Wrap: =true
+                  BorderColor: =colBordo
+                  BorderThickness: =1

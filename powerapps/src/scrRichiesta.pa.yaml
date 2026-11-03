@@ -1,0 +1,2810 @@
+# =============================================================================
+#  Gestione ore formazione – Società Dolce · schermata scrRichiesta
+#  3 – Nuova richiesta / modifica (lavoratore)
+# -----------------------------------------------------------------------------
+#  Formato: sorgente YAML di Power Apps Studio (Copia codice / Incolla codice).
+#  Come incollarla: vedere powerapps/README.md. Le formule sono in notazione
+#  inglese (separatore "," e concatenazione ";"): Studio in italiano le mostra
+#  con ";" e ";;" automaticamente.
+#  Dati: SDF_API03 (bozza/invia/annulla con allegati); letture dirette solo di 'Catalogo corsi' e 'Chiusure mensili'.
+# =============================================================================
+Screens:
+  scrRichiesta:
+    Properties:
+      Fill: =colSfondo
+      OnVisible: |-
+        =Set(varMenuAperto, false);
+        UpdateContext({locDialogo: "", locAzione: "", locConfermaDup: false, locAllegatiInviati: false, locMsgDialogo: ""});
+        ClearCollect(
+            colMesiChiusi,
+            ShowColumns(Filter('Chiusure mensili', 'Stato del periodo'.Value = "Chiuso"), Periodo, Anno, Mese)
+        );
+        // in modifica: la richiesta deve essere tra quelle caricate con SDF_API02
+        If(
+            varIdModifica > 0 && IsBlank(LookUp(colMieRichieste, id = varIdModifica)),
+            Set(varCaricamento, true);
+            Set(varMessaggioCaricamento, "Caricamento della richiesta…");
+            With(
+                {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                If(
+                    rm.esito = "OK",
+                    Set(varJsonMieRichieste, rm.dati);
+                    Set(varMieCaricate, true),
+                    Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                )
+            );
+            Set(varCaricamento, false)
+        );
+        If(
+            varIdModifica > 0 && IsBlank(LookUp(colMieRichieste, id = varIdModifica)),
+            Notify("Richiesta non trovata: si apre un modulo vuoto.", NotificationType.Warning);
+            Set(varIdModifica, 0)
+        );
+        Set(varRicEdit, LookUp(colMieRichieste, id = varIdModifica));
+        // sola lettura se lo stato non è modificabile (§1.5) o se il mese della richiesta è chiuso (R9)
+        UpdateContext({
+            locSolaLettura: varIdModifica > 0 && (
+                !varRicEdit.modificabile ||
+                !IsBlank(LookUp(colMesiChiusi, Anno = varRicEdit.annoCompetenza && Mese = varRicEdit.meseCompetenza))
+            )
+        });
+        Reset(ric_ddEnte);
+        Reset(ric_cmbCorsoCatalogo);
+        Reset(ric_tglStorico);
+        Reset(ric_cmbCorsoStorico);
+        Reset(ric_txtTitoloLibero);
+        Reset(ric_ddModalita);
+        Reset(ric_txtDurataCorso);
+        Reset(ric_tglPiuGiornate);
+        Reset(ric_txtNomeEnte);
+        Reset(ric_dtpData);
+        Reset(ric_ddIniH);
+        Reset(ric_ddIniM);
+        Reset(ric_ddFinH);
+        Reset(ric_ddFinM);
+        Reset(ric_ddIngH);
+        Reset(ric_ddIngM);
+        Reset(ric_ddUscH);
+        Reset(ric_ddUscM);
+        Reset(ric_txtOreRetribuite);
+        Reset(ric_txtOreGettone);
+        Reset(ric_txtNote);
+        Reset(ric_chkPartecipazione);
+        Reset(ric_chkCorrettezza);
+        Reset(ric_chkAutorizzazione);
+        Reset(ric_attAttestato);
+        Reset(ric_attAltraDoc)
+    Children:
+      - ric_conRadice:
+          Control: GroupContainer@1.3.0
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutJustifyContent: =LayoutJustifyContent.Start
+            LayoutGap: =0
+            DropShadow: =DropShadow.None
+            Fill: =colSfondo
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+          Children:
+            - ric_conHeader:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.None
+                  Fill: =colPrimario
+                  Height: =56
+                  FillPortions: =0
+                  PaddingLeft: =12
+                  PaddingRight: =16
+                Children:
+                  - ric_icoMenu:
+                      Control: Classic/Icon@2.5.0
+                      Properties:
+                        Icon: =Icon.Hamburger
+                        OnSelect: =Set(varMenuAperto, !varMenuAperto)
+                        Color: =Color.White
+                        Tooltip: |-
+                          ="Apri o chiudi il menu"
+                        Width: =40
+                        Height: =40
+                        PaddingTop: =4
+                        PaddingBottom: =4
+                        PaddingLeft: =4
+                        PaddingRight: =4
+                        FillPortions: =0
+                        Visible: =isMobile
+                  - ric_lblTitoloApp:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Gestione ore formazione"
+                        Size: =16
+                        Color: =Color.White
+                        FontWeight: =FontWeight.Semibold
+                        FillPortions: =1
+                        Height: =40
+                        LayoutMinWidth: =150
+                  - ric_lblUtente:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =User().FullName & If(haRuolo, " · " & ruoloApp, "")
+                        Size: =11
+                        Color: =Color.White
+                        Align: =Align.Right
+                        Width: =340
+                        Height: =40
+                        FillPortions: =0
+                        Visible: =!isMobile
+            - ric_conCorpo:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =0
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(0, 0, 0, 0)
+                  FillPortions: =1
+                Children:
+                  - ric_conMenu:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =0
+                        DropShadow: =DropShadow.None
+                        Fill: =colSuperficie
+                        Width: =If(isMobile, Parent.Width, 230)
+                        FillPortions: =0
+                        Visible: =!isMobile || varMenuAperto
+                        BorderColor: =colBordo
+                        BorderThickness: =1
+                        PaddingTop: =8
+                      Children:
+                        - ric_lblMenuUtente:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: =User().FullName & Char(10) & ruoloApp
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Visible: =isMobile
+                              Height: =48
+                              FillPortions: =0
+                              PaddingLeft: =12
+                              Wrap: =true
+                        - ric_galMenu:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =tblMenu
+                              TemplateSize: =48
+                              TemplatePadding: =0
+                              ShowScrollbar: =false
+                              BorderColor: =colBordo
+                              BorderThickness: =0
+                              Fill: =RGBA(0, 0, 0, 0)
+                              TemplateFill: =If(ThisItem.Chiave = "nuova", colPrimarioChiaro, RGBA(0, 0, 0, 0))
+                              OnSelect: |-
+                                =Set(varMenuAperto, false);
+                                Switch(
+                                    ThisItem.Chiave,
+                                    "home", Navigate(scrHome, ScreenTransition.None),
+                                    "mie", Navigate(scrMieRichieste, ScreenTransition.None),
+                                    "nuova", Set(varIdModifica, 0); Select(ric_btnInizializza),
+                                    "team", Navigate(scrTeam, ScreenTransition.None),
+                                    "validazione", Navigate(scrValidazioneHR, ScreenTransition.None),
+                                    "riepilogo", Navigate(scrRiepilogo, ScreenTransition.None),
+                                    "chiusura", Navigate(scrChiusura, ScreenTransition.None),
+                                    "admin", Navigate(scrAdmin, ScreenTransition.None),
+                                    "profilo", Navigate(scrProfilo, ScreenTransition.None)
+                                )
+                              DisplayMode: =If(false, DisplayMode.Disabled, DisplayMode.Edit)
+                              FillPortions: =1
+                            Children:
+                              - ric_icoVoceMenu:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =ThisItem.Icona
+                                    OnSelect: =Select(Parent)
+                                    Color: =If(ThisItem.Chiave = "nuova", colPrimario, colTestoSecondario)
+                                    Tooltip: |-
+                                      =""
+                                    Width: =28
+                                    Height: =28
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =12
+                                    Y: =(Parent.TemplateHeight - Self.Height) / 2
+                              - ric_lblVoceMenu:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Voce
+                                    Size: =12
+                                    Color: =If(ThisItem.Chiave = "nuova", colPrimario, colTesto)
+                                    FontWeight: =If(ThisItem.Chiave = "nuova", FontWeight.Semibold, FontWeight.Normal)
+                                    X: =48
+                                    Y: =0
+                                    Width: =Parent.TemplateWidth - 56
+                                    Height: =Parent.TemplateHeight
+                                    OnSelect: =Select(Parent)
+                              - ric_rctVoceAttiva:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colPrimario
+                                    Height: =Parent.TemplateHeight
+                                    X: =0
+                                    Y: =0
+                                    Width: =4
+                                    Visible: =ThisItem.Chiave = "nuova"
+                  - ric_conContenuto:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =12
+                        DropShadow: =DropShadow.None
+                        Fill: =colSfondo
+                        FillPortions: =1
+                        Visible: =!isMobile || !varMenuAperto
+                        PaddingTop: =16
+                        PaddingBottom: =16
+                        PaddingLeft: =If(isMobile, 12, 24)
+                        PaddingRight: =If(isMobile, 12, 24)
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                      Children:
+                        - ric_conTitolo:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              Height: =40
+                              FillPortions: =0
+                            Children:
+                              - ric_lblTitolo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =If(varIdModifica = 0, "Nuova richiesta di formazione", "Richiesta " & varRicEdit.idRichiesta)
+                                    Size: =18
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =36
+                                    FillPortions: =1
+                              - ric_lblStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =varRicEdit.stato
+                                    Size: =10
+                                    Color: =Color.White
+                                    FontWeight: =FontWeight.Semibold
+                                    Fill: =varRicEdit.colore
+                                    Align: =Align.Center
+                                    Width: =220
+                                    Height: =28
+                                    Visible: =varIdModifica > 0
+                        - ric_lblSolaLettura:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Questa richiesta è in sola lettura: lo stato «" & varRicEdit.stato & "» non consente modifiche oppure il mese è chiuso."
+                              Size: =12
+                              Color: =Color.White
+                              FontWeight: =FontWeight.Semibold
+                              Fill: =colTestoSecondario
+                              PaddingLeft: =12
+                              Height: =40
+                              Wrap: =true
+                              FillPortions: =0
+                              Visible: =locSolaLettura
+                        - ric_lblNoteRitorno:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                =Trim(If(!IsBlank(varRicEdit.noteCoordinatore), "Nota del coordinatore: " & varRicEdit.noteCoordinatore & Char(10), "") & If(!IsBlank(varRicEdit.noteHR), "Nota HR: " & varRicEdit.noteHR, ""))
+                              Size: =12
+                              Color: =colTesto
+                              Fill: =RGBA(202, 80, 16, 0.10)
+                              BorderColor: =colAvviso
+                              BorderThickness: =1
+                              PaddingLeft: =12
+                              PaddingTop: =8
+                              PaddingBottom: =8
+                              AutoHeight: =true
+                              Wrap: =true
+                              Height: =40
+                              FillPortions: =0
+                              Visible: =varIdModifica > 0 && !IsBlank(Self.Text)
+                        - ric_conLavoratore:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + ric_lblSezLavoratore.Height + 8 + ric_rigaLav1.Height + 8 + ric_rigaLav2.Height + 8 + ric_lblSegnala.Height + 8
+                            Children:
+                              - ric_lblSezLavoratore:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Dati del lavoratore"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - ric_rigaLav1:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76, 64)
+                                  Children:
+                                    - ric_conCampoNominativo:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoNominativo:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Nome e cognome"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblNominativo:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(Trim(recProfilo.nome & " " & recProfilo.cognome), User().FullName)
+                                                Size: =12
+                                                Color: =colTesto
+                                                FontWeight: =FontWeight.Semibold
+                                                FillPortions: =0
+                                                Height: =36
+                                    - ric_conCampoEmailPers:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoEmailPers:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="E-mail di contatto"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblEmailPers:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(recProfilo.emailPersonale, "—")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                                    - ric_conCampoCF:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoCF:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Codice fiscale"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblCF:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(recProfilo.cfMascherato, "—")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                              - ric_rigaLav2:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76 + 76, 64)
+                                  Children:
+                                    - ric_conCampoArea:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoArea:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Area"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblArea:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(recProfilo.area, "—")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                                    - ric_conCampoServizio:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoServizio:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Servizio"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblServizio:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(recProfilo.servizio, "—")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                                    - ric_conCampoCdc:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoCdc:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Centro di costo"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblCdc:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(recProfilo.centroDiCosto, "—")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                                    - ric_conCampoCoord:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoCoord:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Coordinatore"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblCoord:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(recProfilo.coordinatoreNome, "Non assegnato")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                              - ric_lblSegnala:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Dati organizzativi non corretti? Segnala la variazione a HR dal tuo profilo ›"
+                                    Size: =11
+                                    Color: =colInfo
+                                    Underline: =true
+                                    Height: =24
+                                    FillPortions: =0
+                                    OnSelect: =Navigate(scrProfilo, ScreenTransition.None)
+                        - ric_conCorso:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + ric_lblSezCorso.Height + 8 + ric_rigaEnte.Height + 8 + If(ric_rigaInfoCatalogo.Visible, ric_rigaInfoCatalogo.Height + 8, 0) + If(ric_rigaInfoStorico.Visible, ric_rigaInfoStorico.Height + 8, 0) + If(ric_rigaNuovoCorso.Visible, ric_rigaNuovoCorso.Height + 8, 0) + If(ric_rigaNuovoCorso2.Visible, ric_rigaNuovoCorso2.Height + 8, 0) + If(ric_lblInfoNuovoCorso.Visible, ric_lblInfoNuovoCorso.Height + 8, 0)
+                            Children:
+                              - ric_lblSezCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Attività formativa"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - ric_rigaEnte:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + If(ric_conCampoCorsoCatalogo.Visible, 76, 0) + If(ric_conCampoTipoEsterno.Visible, 76, 0) + If(ric_conCampoCorsoStorico.Visible, 76, 0), 64)
+                                  Children:
+                                    - ric_conCampoEnte:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =220
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoEnte:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ente erogatore"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_ddEnte:
+                                              Control: Classic/DropDown@2.3.1
+                                              Properties:
+                                                Items: =tblEnti
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                ChevronBackground: =colPrimario
+                                                ChevronFill: =Color.White
+                                                Default: =Coalesce(varRicEdit.enteErogatore, "Datore di lavoro")
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                    - ric_conCampoCorsoCatalogo:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =2
+                                          LayoutMinWidth: =260
+                                          Height: =64
+                                          Visible: =ric_ddEnte.Selected.Value = "Datore di lavoro"
+                                        Children:
+                                          - ric_lblCampoCorsoCatalogo:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Titolo del corso a catalogo (cerca per titolo o codice)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_cmbCorsoCatalogo:
+                                              Control: Classic/ComboBox@2.4.0
+                                              Properties:
+                                                Items: |-
+                                                  =Filter(
+                                                      'Catalogo corsi',
+                                                      'Ente erogatore'.Value = "Datore di lavoro",
+                                                      'Corso attivo' = true,
+                                                      'Stato validazione'.Value = "Validato"
+                                                  )
+                                                DisplayFields: =["Title"]
+                                                SearchFields: =["Title", "CodiceCorso"]
+                                                SelectMultiple: =false
+                                                IsSearchable: =true
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                ChevronBackground: =colPrimario
+                                                ChevronFill: =Color.White
+                                                InputTextPlaceholder: |-
+                                                  ="Cerca…"
+                                                DefaultSelectedItems: =Filter('Catalogo corsi', ID = If(varRicEdit.enteErogatore = "Datore di lavoro", varRicEdit.corsoId, -1))
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                    - ric_conCampoTipoEsterno:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =220
+                                          Height: =64
+                                          Visible: =!(ric_ddEnte.Selected.Value = "Datore di lavoro")
+                                        Children:
+                                          - ric_lblCampoTipoEsterno:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Corso esterno"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_tglStorico:
+                                              Control: Classic/Toggle@2.1.0
+                                              Properties:
+                                                Default: =varRicEdit.enteErogatore = "Committente o altro soggetto" && varRicEdit.corsoId > 0
+                                                TrueText: |-
+                                                  ="Già inserito (storico)"
+                                                FalseText: |-
+                                                  ="Nuovo corso"
+                                                TrueFill: =colPrimario
+                                                Height: =36
+                                                Width: =260
+                                                FillPortions: =0
+                                                Size: =12
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                    - ric_conCampoCorsoStorico:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =2
+                                          LayoutMinWidth: =260
+                                          Height: =64
+                                          Visible: =!(ric_ddEnte.Selected.Value = "Datore di lavoro") && ric_tglStorico.Value
+                                        Children:
+                                          - ric_lblCampoCorsoStorico:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Corso dallo storico (corsi su più giornate inseriti da te)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_cmbCorsoStorico:
+                                              Control: Classic/ComboBox@2.4.0
+                                              Properties:
+                                                Items: |-
+                                                  =Filter(
+                                                      'Catalogo corsi',
+                                                      'Login autore' = recProfilo.login,
+                                                      'Corso attivo' = true,
+                                                      'Più giornate formative' = true || ID = Coalesce(varRicEdit.corsoId, -1)
+                                                  )
+                                                DisplayFields: =["Title"]
+                                                SearchFields: =["Title", "CodiceCorso"]
+                                                SelectMultiple: =false
+                                                IsSearchable: =true
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                ChevronBackground: =colPrimario
+                                                ChevronFill: =Color.White
+                                                InputTextPlaceholder: |-
+                                                  ="Cerca…"
+                                                DefaultSelectedItems: =Filter('Catalogo corsi', ID = If(varRicEdit.enteErogatore = "Committente o altro soggetto", varRicEdit.corsoId, -1))
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                              - ric_rigaInfoCatalogo:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76 + 76, 64)
+                                    Visible: =ric_ddEnte.Selected.Value = "Datore di lavoro" && !IsBlank(ric_cmbCorsoCatalogo.Selected.ID)
+                                  Children:
+                                    - ric_conCampoCodCat:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoCodCat:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Codice univoco corso"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblCodCat:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =ric_cmbCorsoCatalogo.Selected.'Codice univoco corso'
+                                                Size: =12
+                                                Color: =colTesto
+                                                FontWeight: =FontWeight.Semibold
+                                                FillPortions: =0
+                                                Height: =36
+                                    - ric_conCampoModCat:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoModCat:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Modalità di svolgimento"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblModCat:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =ric_cmbCorsoCatalogo.Selected.'Modalità di svolgimento'.Value
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                                    - ric_conCampoDurCat:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoDurCat:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Durata corso"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblDurCat:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  =Text(ric_cmbCorsoCatalogo.Selected.'Durata corso', "[$-en-US]0.##") & " h"
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                                    - ric_conCampoGetCat:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoGetCat:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Gettone previsto"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblGetCat:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =If(ric_cmbCorsoCatalogo.Selected.'Gettone previsto', "Sì", "No")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                              - ric_rigaInfoStorico:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76 + 76, 64)
+                                    Visible: =!(ric_ddEnte.Selected.Value = "Datore di lavoro") && ric_tglStorico.Value && !IsBlank(ric_cmbCorsoStorico.Selected.ID)
+                                  Children:
+                                    - ric_conCampoCodSto:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoCodSto:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Codice univoco corso"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblCodSto:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =ric_cmbCorsoStorico.Selected.'Codice univoco corso'
+                                                Size: =12
+                                                Color: =colTesto
+                                                FontWeight: =FontWeight.Semibold
+                                                FillPortions: =0
+                                                Height: =36
+                                    - ric_conCampoModSto:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoModSto:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Modalità di svolgimento"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblModSto:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =ric_cmbCorsoStorico.Selected.'Modalità di svolgimento'.Value
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                                    - ric_conCampoDurSto:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoDurSto:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Durata complessiva"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblDurSto:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  =Text(ric_cmbCorsoStorico.Selected.'Durata corso', "[$-en-US]0.##") & " h"
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                                    - ric_conCampoEnteSto:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoEnteSto:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ente"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblEnteSto:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(ric_cmbCorsoStorico.Selected.'Nome ente erogatore', "—")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                              - ric_rigaNuovoCorso:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76, 64)
+                                    Visible: =!(ric_ddEnte.Selected.Value = "Datore di lavoro") && !ric_tglStorico.Value
+                                  Children:
+                                    - ric_conCampoTitoloLibero:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =2
+                                          LayoutMinWidth: =260
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoTitoloLibero:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Titolo del corso (libero)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_txtTitoloLibero:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: |-
+                                                  =""
+                                                HintText: |-
+                                                  ="Es. Primo soccorso pediatrico"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                                MaxLength: =255
+                                    - ric_conCampoModalita:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoModalita:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Modalità di svolgimento"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_ddModalita:
+                                              Control: Classic/DropDown@2.3.1
+                                              Properties:
+                                                Items: =tblModalita
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                ChevronBackground: =colPrimario
+                                                ChevronFill: =Color.White
+                                                Default: |-
+                                                  ="In presenza"
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                    - ric_conCampoDurataCorso:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoDurataCorso:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Durata complessiva corso (ore)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_txtDurataCorso:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: |-
+                                                  =""
+                                                HintText: |-
+                                                  ="Es. 8"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                Format: =TextFormat.Number
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                              - ric_rigaNuovoCorso2:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76, 64)
+                                    Visible: =!(ric_ddEnte.Selected.Value = "Datore di lavoro") && !ric_tglStorico.Value
+                                  Children:
+                                    - ric_conCampoPiuGiornate:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoPiuGiornate:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Previste più giornate formative?"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_tglPiuGiornate:
+                                              Control: Classic/Toggle@2.1.0
+                                              Properties:
+                                                Default: =false
+                                                TrueText: |-
+                                                  ="Sì (riselezionabile in seguito)"
+                                                FalseText: |-
+                                                  ="No"
+                                                TrueFill: =colPrimario
+                                                Height: =36
+                                                Width: =260
+                                                FillPortions: =0
+                                                Size: =12
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                    - ric_conCampoNomeEnte:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =2
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoNomeEnte:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Nome dell’ente erogatore"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_txtNomeEnte:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: |-
+                                                  =""
+                                                HintText: |-
+                                                  ="Es. ASL Bologna"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                              - ric_lblInfoNuovoCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Il codice del nuovo corso (EXT-…) viene creato automaticamente al salvataggio. Se il corso prevede più giornate, la prossima volta lo troverai nello storico."
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    AutoHeight: =true
+                                    Wrap: =true
+                                    FillPortions: =0
+                                    Height: =20
+                                    Visible: =!(ric_ddEnte.Selected.Value = "Datore di lavoro") && !ric_tglStorico.Value
+                        - ric_conSessione:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + ric_lblSezSessione.Height + 8 + ric_rigaSessione.Height + 8 + ric_rigaPresenza.Height + 8 + ric_rigaOre.Height + 8 + ric_conCampoNote.Height + 8
+                            Children:
+                              - ric_lblSezSessione:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Sessione e presenza"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - ric_rigaSessione:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76 + 76, 64)
+                                  Children:
+                                    - ric_conCampoData:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoData:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Data della sessione formativa"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_dtpData:
+                                              Control: Classic/DatePicker@2.6.0
+                                              Properties:
+                                                DefaultDate: =Coalesce(varRicEdit.dataSessione, Today())
+                                                Format: |-
+                                                  ="dd/mm/yyyy"
+                                                Language: |-
+                                                  ="it-IT"
+                                                StartOfWeek: =StartOfWeek.Monday
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                IconBackground: =colPrimario
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                    - ric_conCampoOraIni:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =170
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoOraIni:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ora inizio sessione"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_conOraIni:
+                                              Control: GroupContainer@1.3.0
+                                              Variant: AutoLayout
+                                              Properties:
+                                                LayoutDirection: =LayoutDirection.Horizontal
+                                                LayoutAlignItems: =LayoutAlignItems.Center
+                                                LayoutJustifyContent: =LayoutJustifyContent.Start
+                                                LayoutGap: =4
+                                                DropShadow: =DropShadow.None
+                                                Fill: =RGBA(0, 0, 0, 0)
+                                                Height: =36
+                                                FillPortions: =0
+                                              Children:
+                                                - ric_ddIniH:
+                                                    Control: Classic/DropDown@2.3.1
+                                                    Properties:
+                                                      Items: =tblOre
+                                                      Size: =12
+                                                      BorderColor: =colBordo
+                                                      Height: =36
+                                                      FillPortions: =0
+                                                      ChevronBackground: =colPrimario
+                                                      ChevronFill: =Color.White
+                                                      Default: =Coalesce(Left(varRicEdit.oraInizioSessione, 2), "09")
+                                                      Width: =72
+                                                      DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                                      Tooltip: |-
+                                                        ="Ora inizio sessione: ore"
+                                                - ric_lblDuePuntiIni:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      Text: |-
+                                                        =":"
+                                                      Size: =14
+                                                      Color: =colTesto
+                                                      FontWeight: =FontWeight.Semibold
+                                                      Width: =10
+                                                      Height: =36
+                                                - ric_ddIniM:
+                                                    Control: Classic/DropDown@2.3.1
+                                                    Properties:
+                                                      Items: =tblMinuti
+                                                      Size: =12
+                                                      BorderColor: =colBordo
+                                                      Height: =36
+                                                      FillPortions: =0
+                                                      ChevronBackground: =colPrimario
+                                                      ChevronFill: =Color.White
+                                                      Default: =Coalesce(Mid(varRicEdit.oraInizioSessione, 4, 2), "00")
+                                                      Width: =72
+                                                      DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                                      Tooltip: |-
+                                                        ="Ora inizio sessione: minuti"
+                                    - ric_conCampoOraFin:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =170
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoOraFin:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ora fine sessione"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_conOraFin:
+                                              Control: GroupContainer@1.3.0
+                                              Variant: AutoLayout
+                                              Properties:
+                                                LayoutDirection: =LayoutDirection.Horizontal
+                                                LayoutAlignItems: =LayoutAlignItems.Center
+                                                LayoutJustifyContent: =LayoutJustifyContent.Start
+                                                LayoutGap: =4
+                                                DropShadow: =DropShadow.None
+                                                Fill: =RGBA(0, 0, 0, 0)
+                                                Height: =36
+                                                FillPortions: =0
+                                              Children:
+                                                - ric_ddFinH:
+                                                    Control: Classic/DropDown@2.3.1
+                                                    Properties:
+                                                      Items: =tblOre
+                                                      Size: =12
+                                                      BorderColor: =colBordo
+                                                      Height: =36
+                                                      FillPortions: =0
+                                                      ChevronBackground: =colPrimario
+                                                      ChevronFill: =Color.White
+                                                      Default: =Coalesce(Left(varRicEdit.oraFineSessione, 2), "13")
+                                                      Width: =72
+                                                      DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                                      Tooltip: |-
+                                                        ="Ora fine sessione: ore"
+                                                - ric_lblDuePuntiFin:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      Text: |-
+                                                        =":"
+                                                      Size: =14
+                                                      Color: =colTesto
+                                                      FontWeight: =FontWeight.Semibold
+                                                      Width: =10
+                                                      Height: =36
+                                                - ric_ddFinM:
+                                                    Control: Classic/DropDown@2.3.1
+                                                    Properties:
+                                                      Items: =tblMinuti
+                                                      Size: =12
+                                                      BorderColor: =colBordo
+                                                      Height: =36
+                                                      FillPortions: =0
+                                                      ChevronBackground: =colPrimario
+                                                      ChevronFill: =Color.White
+                                                      Default: =Coalesce(Mid(varRicEdit.oraFineSessione, 4, 2), "00")
+                                                      Width: =72
+                                                      DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                                      Tooltip: |-
+                                                        ="Ora fine sessione: minuti"
+                                    - ric_conCampoDurSess:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoDurSess:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Durata sessione (calcolata)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblDurSess:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =If(DateDiff(Time(Value(ric_ddIniH.Selected.Value), Value(ric_ddIniM.Selected.Value), 0), Time(Value(ric_ddFinH.Selected.Value), Value(ric_ddFinM.Selected.Value), 0), TimeUnit.Minutes) > 0, Text(Round(DateDiff(Time(Value(ric_ddIniH.Selected.Value), Value(ric_ddIniM.Selected.Value), 0), Time(Value(ric_ddFinH.Selected.Value), Value(ric_ddFinM.Selected.Value), 0), TimeUnit.Minutes) / 60, 2), "[$-en-US]0.00") & " h", "—")
+                                                Size: =13
+                                                Color: =colPrimario
+                                                FontWeight: =FontWeight.Semibold
+                                                FillPortions: =0
+                                                Height: =36
+                              - ric_rigaPresenza:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76, 64)
+                                  Children:
+                                    - ric_conCampoOraIng:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =170
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoOraIng:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ora ingresso lavoratore"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_conOraIng:
+                                              Control: GroupContainer@1.3.0
+                                              Variant: AutoLayout
+                                              Properties:
+                                                LayoutDirection: =LayoutDirection.Horizontal
+                                                LayoutAlignItems: =LayoutAlignItems.Center
+                                                LayoutJustifyContent: =LayoutJustifyContent.Start
+                                                LayoutGap: =4
+                                                DropShadow: =DropShadow.None
+                                                Fill: =RGBA(0, 0, 0, 0)
+                                                Height: =36
+                                                FillPortions: =0
+                                              Children:
+                                                - ric_ddIngH:
+                                                    Control: Classic/DropDown@2.3.1
+                                                    Properties:
+                                                      Items: =tblOre
+                                                      Size: =12
+                                                      BorderColor: =colBordo
+                                                      Height: =36
+                                                      FillPortions: =0
+                                                      ChevronBackground: =colPrimario
+                                                      ChevronFill: =Color.White
+                                                      Default: =Coalesce(Left(varRicEdit.oraIngresso, 2), "09")
+                                                      Width: =72
+                                                      DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                                      Tooltip: |-
+                                                        ="Ora ingresso lavoratore: ore"
+                                                - ric_lblDuePuntiIng:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      Text: |-
+                                                        =":"
+                                                      Size: =14
+                                                      Color: =colTesto
+                                                      FontWeight: =FontWeight.Semibold
+                                                      Width: =10
+                                                      Height: =36
+                                                - ric_ddIngM:
+                                                    Control: Classic/DropDown@2.3.1
+                                                    Properties:
+                                                      Items: =tblMinuti
+                                                      Size: =12
+                                                      BorderColor: =colBordo
+                                                      Height: =36
+                                                      FillPortions: =0
+                                                      ChevronBackground: =colPrimario
+                                                      ChevronFill: =Color.White
+                                                      Default: =Coalesce(Mid(varRicEdit.oraIngresso, 4, 2), "00")
+                                                      Width: =72
+                                                      DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                                      Tooltip: |-
+                                                        ="Ora ingresso lavoratore: minuti"
+                                    - ric_conCampoOraUsc:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =170
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoOraUsc:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ora uscita lavoratore"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_conOraUsc:
+                                              Control: GroupContainer@1.3.0
+                                              Variant: AutoLayout
+                                              Properties:
+                                                LayoutDirection: =LayoutDirection.Horizontal
+                                                LayoutAlignItems: =LayoutAlignItems.Center
+                                                LayoutJustifyContent: =LayoutJustifyContent.Start
+                                                LayoutGap: =4
+                                                DropShadow: =DropShadow.None
+                                                Fill: =RGBA(0, 0, 0, 0)
+                                                Height: =36
+                                                FillPortions: =0
+                                              Children:
+                                                - ric_ddUscH:
+                                                    Control: Classic/DropDown@2.3.1
+                                                    Properties:
+                                                      Items: =tblOre
+                                                      Size: =12
+                                                      BorderColor: =colBordo
+                                                      Height: =36
+                                                      FillPortions: =0
+                                                      ChevronBackground: =colPrimario
+                                                      ChevronFill: =Color.White
+                                                      Default: =Coalesce(Left(varRicEdit.oraUscita, 2), "13")
+                                                      Width: =72
+                                                      DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                                      Tooltip: |-
+                                                        ="Ora uscita lavoratore: ore"
+                                                - ric_lblDuePuntiUsc:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      Text: |-
+                                                        =":"
+                                                      Size: =14
+                                                      Color: =colTesto
+                                                      FontWeight: =FontWeight.Semibold
+                                                      Width: =10
+                                                      Height: =36
+                                                - ric_ddUscM:
+                                                    Control: Classic/DropDown@2.3.1
+                                                    Properties:
+                                                      Items: =tblMinuti
+                                                      Size: =12
+                                                      BorderColor: =colBordo
+                                                      Height: =36
+                                                      FillPortions: =0
+                                                      ChevronBackground: =colPrimario
+                                                      ChevronFill: =Color.White
+                                                      Default: =Coalesce(Mid(varRicEdit.oraUscita, 4, 2), "00")
+                                                      Width: =72
+                                                      DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                                      Tooltip: |-
+                                                        ="Ora uscita lavoratore: minuti"
+                                    - ric_conCampoOreFreq:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoOreFreq:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ore frequentate (calcolate)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblOreFreq:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =If(DateDiff(Time(Value(ric_ddIngH.Selected.Value), Value(ric_ddIngM.Selected.Value), 0), Time(Value(ric_ddUscH.Selected.Value), Value(ric_ddUscM.Selected.Value), 0), TimeUnit.Minutes) > 0, Text(Round(DateDiff(Time(Value(ric_ddIngH.Selected.Value), Value(ric_ddIngM.Selected.Value), 0), Time(Value(ric_ddUscH.Selected.Value), Value(ric_ddUscM.Selected.Value), 0), TimeUnit.Minutes) / 60, 2), "[$-en-US]0.00") & " h", "—")
+                                                Size: =13
+                                                Color: =colPrimario
+                                                FontWeight: =FontWeight.Semibold
+                                                FillPortions: =0
+                                                Height: =36
+                              - ric_rigaOre:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76, 64)
+                                  Children:
+                                    - ric_conCampoOreRet:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoOreRet:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ore retribuite richieste"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_txtOreRetribuite:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: =Coalesce(varRicEdit.oreRetribuiteRichieste, 0)
+                                                HintText: |-
+                                                  ="0"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                Format: =TextFormat.Number
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                                    - ric_conCampoOreGet:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoOreGet:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ore gettone richieste"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_txtOreGettone:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: =If((ric_ddEnte.Selected.Value = "Datore di lavoro" && !IsBlank(ric_cmbCorsoCatalogo.Selected.ID) && !ric_cmbCorsoCatalogo.Selected.'Gettone previsto'), 0, Coalesce(varRicEdit.oreGettoneRichieste, 0))
+                                                HintText: |-
+                                                  ="0"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                Format: =TextFormat.Number
+                                                DisplayMode: =If(locSolaLettura, DisplayMode.View, (ric_ddEnte.Selected.Value = "Datore di lavoro" && !IsBlank(ric_cmbCorsoCatalogo.Selected.ID) && !ric_cmbCorsoCatalogo.Selected.'Gettone previsto'), DisplayMode.Disabled, DisplayMode.Edit)
+                                                Tooltip: =If((ric_ddEnte.Selected.Value = "Datore di lavoro" && !IsBlank(ric_cmbCorsoCatalogo.Selected.ID) && !ric_cmbCorsoCatalogo.Selected.'Gettone previsto'), "Il corso non prevede il gettone (R5)", "")
+                                    - ric_conCampoInfoGettone:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =2
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - ric_lblCampoInfoGettone:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  =" "
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblInfoGettone:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  =If((ric_ddEnte.Selected.Value = "Datore di lavoro" && !IsBlank(ric_cmbCorsoCatalogo.Selected.ID) && !ric_cmbCorsoCatalogo.Selected.'Gettone previsto'), "Questo corso non prevede il gettone: le ore gettone restano a 0.", "Ore retribuite + gettone non possono superare le ore frequentate.")
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Wrap: =true
+                                                FillPortions: =0
+                                                Height: =36
+                              - ric_conCampoNote:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =100
+                                  Children:
+                                    - ric_lblCampoNote:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Note"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - ric_txtNote:
+                                        Control: Classic/TextInput@2.3.2
+                                        Properties:
+                                          Default: =varRicEdit.noteLavoratore
+                                          HintText: |-
+                                            ="Informazioni utili per il coordinatore"
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =72
+                                          FillPortions: =0
+                                          RadiusTopLeft: =4
+                                          RadiusTopRight: =4
+                                          RadiusBottomLeft: =4
+                                          RadiusBottomRight: =4
+                                          Mode: =TextMode.MultiLine
+                                          DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                        - ric_conAllegati:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =If(isMobile, 420, 254)
+                            Children:
+                              - ric_lblSezAllegati:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Allegati"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - ric_lblInfoAllegati:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="PDF o immagine, massimo 10 MB per file. Un file per tipo: un nuovo caricamento sostituisce quello già presente."
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    AutoHeight: =true
+                                    Wrap: =true
+                                    FillPortions: =0
+                                    Height: =20
+                              - ric_conAllegatiRiga:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =16
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 316, 150)
+                                  Children:
+                                    - ric_conAttestato:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =8
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =240
+                                          Height: =150
+                                        Children:
+                                          - ric_lblAttestato:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Attestato rilasciato"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblAttestatoPresente:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Attestato già caricato ✓"
+                                                Size: =11
+                                                Color: =colSuccesso
+                                                FontWeight: =FontWeight.Semibold
+                                                Height: =20
+                                                FillPortions: =0
+                                                Visible: =varRicEdit.attestatoPresente
+                                          # QUI va incollato il controllo allegati ric_attAttestato (vedi powerapps/README.md, «Controlli allegati»):
+                                          # Items = Blank(), MaxAttachments = 1, MaxAttachmentSize = 10,
+                                          # DisplayMode = If(locSolaLettura, DisplayMode.View, DisplayMode.Edit), Height = 100
+                                    - ric_conAltraDoc:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =8
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =240
+                                          Height: =150
+                                        Children:
+                                          - ric_lblAltraDoc:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Altra documentazione"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - ric_lblAltraDocPresente:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Documento già caricato ✓"
+                                                Size: =11
+                                                Color: =colSuccesso
+                                                FontWeight: =FontWeight.Semibold
+                                                Height: =20
+                                                FillPortions: =0
+                                                Visible: =!IsBlank(varRicEdit.altraDocUrl)
+                                          # QUI va incollato il controllo allegati ric_attAltraDoc (stesse proprietà di ric_attAttestato)
+                        - ric_conDichiarazioni:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + ric_lblSezDich.Height + 8 + ric_chkPartecipazione.Height + 8 + ric_chkCorrettezza.Height + 8 + ric_chkAutorizzazione.Height + 8
+                            Children:
+                              - ric_lblSezDich:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Dichiarazioni"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - ric_chkPartecipazione:
+                                  Control: Classic/CheckBox@2.1.0
+                                  Properties:
+                                    Text: |-
+                                      ="Confermo di aver partecipato alla sessione formativa indicata"
+                                    Default: =Coalesce(varRicEdit.confermaPartecipazione, false)
+                                    Size: =12
+                                    Color: =colTesto
+                                    CheckmarkFill: =Color.White
+                                    CheckboxBackgroundFill: =Color.White
+                                    CheckboxBorderColor: =colPrimario
+                                    Height: =40
+                                    FillPortions: =0
+                                    DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                              - ric_chkCorrettezza:
+                                  Control: Classic/CheckBox@2.1.0
+                                  Properties:
+                                    Text: |-
+                                      ="Confermo che i dati inseriti sono corretti"
+                                    Default: =Coalesce(varRicEdit.confermaCorrettezza, false)
+                                    Size: =12
+                                    Color: =colTesto
+                                    CheckmarkFill: =Color.White
+                                    CheckboxBackgroundFill: =Color.White
+                                    CheckboxBorderColor: =colPrimario
+                                    Height: =40
+                                    FillPortions: =0
+                                    DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                              - ric_chkAutorizzazione:
+                                  Control: Classic/CheckBox@2.1.0
+                                  Properties:
+                                    Text: |-
+                                      ="Autorizzo l’invio della richiesta al coordinatore e all’Ufficio HR/Formazione"
+                                    Default: =Coalesce(varRicEdit.autorizzazioneInvio, false)
+                                    Size: =12
+                                    Color: =colTesto
+                                    CheckmarkFill: =Color.White
+                                    CheckboxBackgroundFill: =Color.White
+                                    CheckboxBorderColor: =colPrimario
+                                    Height: =40
+                                    FillPortions: =0
+                                    DisplayMode: =If(locSolaLettura, DisplayMode.View, DisplayMode.Edit)
+                        - ric_lblErrori:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                =With(
+                                    {
+                                        minSess: DateDiff(Time(Value(ric_ddIniH.Selected.Value), Value(ric_ddIniM.Selected.Value), 0), Time(Value(ric_ddFinH.Selected.Value), Value(ric_ddFinM.Selected.Value), 0), TimeUnit.Minutes),
+                                        minFreq: DateDiff(Time(Value(ric_ddIngH.Selected.Value), Value(ric_ddIngM.Selected.Value), 0), Time(Value(ric_ddUscH.Selected.Value), Value(ric_ddUscM.Selected.Value), 0), TimeUnit.Minutes),
+                                        oreRet: Coalesce(Value(ric_txtOreRetribuite.Text), 0),
+                                        oreGet: If((ric_ddEnte.Selected.Value = "Datore di lavoro" && !IsBlank(ric_cmbCorsoCatalogo.Selected.ID) && !ric_cmbCorsoCatalogo.Selected.'Gettone previsto'), 0, Coalesce(Value(ric_txtOreGettone.Text), 0)),
+                                        d: ric_dtpData.SelectedDate
+                                    },
+                                    Concat(
+                                        Filter(
+                                            Table(
+                                                {Errore: If(
+                                                    ric_ddEnte.Selected.Value = "Datore di lavoro", IsBlank(ric_cmbCorsoCatalogo.Selected.ID),
+                                                    ric_tglStorico.Value, IsBlank(ric_cmbCorsoStorico.Selected.ID),
+                                                    IsBlank(Trim(ric_txtTitoloLibero.Text)) || IsBlank(ric_ddModalita.Selected.Value) || Coalesce(Value(ric_txtDurataCorso.Text), 0) <= 0
+                                                ), Testo: "Indica il corso: sceglilo dal catalogo o dallo storico, oppure inserisci titolo, modalità e durata del nuovo corso."},
+                                                {Errore: IsBlank(d), Testo: "Indica la data della sessione formativa."},
+                                                {Errore: minSess <= 0, Testo: "R1 · L’ora di fine sessione deve essere successiva all’ora di inizio."},
+                                                {Errore: minFreq <= 0, Testo: "R1 · L’ora di uscita deve essere successiva all’ora di ingresso."},
+                                                {Errore: minFreq > minSess, Testo: "R2 · Le ore frequentate non possono superare la durata della sessione."},
+                                                {Errore: oreRet < 0 || oreGet < 0, Testo: "R3 · Le ore richieste non possono essere negative."},
+                                                {Errore: oreRet + oreGet > Round(minFreq / 60, 2), Testo: "R3 · Ore retribuite + ore gettone richieste non possono superare le ore frequentate."},
+                                                {Errore: !IsBlank(d) && !IsBlank(LookUp('Chiusure mensili', Anno = Year(d) && Mese = Month(d) && 'Stato del periodo'.Value = "Chiuso")), Testo: "R9 · Il mese della data indicata è chiuso: non si possono inserire o modificare richieste."}
+                                            ),
+                                            Errore
+                                        ),
+                                        "• " & Testo,
+                                        Char(10)
+                                    )
+                                )
+                              Size: =11
+                              Color: =colErrore
+                              AutoHeight: =true
+                              Wrap: =true
+                              Height: =20
+                              FillPortions: =0
+                              Visible: =!IsBlank(Self.Text)
+                        - ric_lblErroriInvio:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                =Concat(
+                                    Filter(
+                                        Table(
+                                            {Errore: Coalesce(Value(ric_txtOreRetribuite.Text), 0) + If((ric_ddEnte.Selected.Value = "Datore di lavoro" && !IsBlank(ric_cmbCorsoCatalogo.Selected.ID) && !ric_cmbCorsoCatalogo.Selected.'Gettone previsto'), 0, Coalesce(Value(ric_txtOreGettone.Text), 0)) <= 0, Testo: "R11 · Per inviare indica le ore retribuite e/o le ore gettone richieste (maggiori di zero)."},
+                                            {Errore: !(ric_chkPartecipazione.Value && ric_chkCorrettezza.Value && ric_chkAutorizzazione.Value), Testo: "R11 · Per inviare spunta le tre dichiarazioni."},
+                                            {Errore: IsBlank(recProfilo.coordinatoreLogin), Testo: "R11 · Non hai un coordinatore assegnato: segnala la variazione a HR dal tuo profilo."},
+                                            {Errore: IsBlank(recProfilo.emailPersonale), Testo: "R11 · Manca l’e-mail personale nel profilo."}
+                                        ),
+                                        Errore
+                                    ),
+                                    "• " & Testo,
+                                    Char(10)
+                                )
+                              Size: =11
+                              Color: =colAvviso
+                              AutoHeight: =true
+                              Wrap: =true
+                              Height: =20
+                              FillPortions: =0
+                              Visible: =!IsBlank(Self.Text) && !locSolaLettura
+                        - ric_lblAvvisi:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                =With(
+                                    {cod: If(ric_ddEnte.Selected.Value = "Datore di lavoro", ric_cmbCorsoCatalogo.Selected.'Codice univoco corso', ric_tglStorico.Value, ric_cmbCorsoStorico.Selected.'Codice univoco corso', ""), dur: If(ric_ddEnte.Selected.Value = "Datore di lavoro", Coalesce(ric_cmbCorsoCatalogo.Selected.'Durata corso', 0), ric_tglStorico.Value, Coalesce(ric_cmbCorsoStorico.Selected.'Durata corso', 0), Coalesce(Value(ric_txtDurataCorso.Text), 0)), sess: Round(DateDiff(Time(Value(ric_ddIniH.Selected.Value), Value(ric_ddIniM.Selected.Value), 0), Time(Value(ric_ddFinH.Selected.Value), Value(ric_ddFinM.Selected.Value), 0), TimeUnit.Minutes) / 60, 2)},
+                                    Concat(
+                                        Filter(
+                                            Table(
+                                                {
+                                                    Avviso: !IsBlank(cod) && dur > 0 && Sum(Filter(colMieRichieste, codiceCorso = cod && id <> varIdModifica && !(stato in ["Annullata", "Respinta dal coordinatore", "Respinta da HR"])), durataSessione) + sess > dur,
+                                                    Testo: "R6 · Con questa sessione la somma delle tue sessioni per il corso supera la durata complessiva (" & Text(dur, "[$-en-US]0.##") & " h): l’invio verrà bloccato."
+                                                },
+                                                {
+                                                    Avviso: IsBlank(cod) && dur > 0 && sess > dur,
+                                                    Testo: "R6 · La durata della sessione supera la durata complessiva indicata per il corso."
+                                                },
+                                                {
+                                                    Avviso: !IsBlank(cod) && !IsBlank(LookUp(colMieRichieste, codiceCorso = cod && dataSessione = ric_dtpData.SelectedDate && id <> varIdModifica && !(stato in ["Annullata", "Respinta dal coordinatore", "Respinta da HR"]))),
+                                                    Testo: "R7 · Hai già una richiesta per questo corso nella stessa data: all’invio ti verrà chiesta conferma (possibile duplicato)."
+                                                }
+                                            ),
+                                            Avviso
+                                        ),
+                                        "• " & Testo,
+                                        Char(10)
+                                    )
+                                )
+                              Size: =11
+                              Color: =colAvviso
+                              AutoHeight: =true
+                              Wrap: =true
+                              Height: =20
+                              FillPortions: =0
+                              Visible: =!IsBlank(Self.Text)
+                        - ric_conPulsanti:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              LayoutWrap: =true
+                              Height: =If(isMobile, 2 * 48, 48)
+                              FillPortions: =0
+                            Children:
+                              - ric_btnBozza:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Salva bozza"
+                                    OnSelect: |-
+                                      =UpdateContext({locAzione: "bozza", locConfermaDup: false}); Select(ric_btnEsegui)
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =160
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =Color.White
+                                    Color: =colPrimario
+                                    HoverFill: =colPrimarioChiaro
+                                    PressedFill: =colPrimarioChiaro
+                                    HoverColor: =colPrimario
+                                    BorderColor: =colPrimario
+                                    BorderThickness: =1
+                                    DisplayMode: =If(locSolaLettura || !IsBlank(ric_lblErrori.Text), DisplayMode.Disabled, DisplayMode.Edit)
+                              - ric_btnInvia:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Invia al coordinatore"
+                                    OnSelect: |-
+                                      =UpdateContext({locAzione: "invia", locConfermaDup: false}); Select(ric_btnEsegui)
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =210
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =colPrimario
+                                    Color: =Color.White
+                                    HoverFill: =colPrimarioScuro
+                                    PressedFill: =colPrimarioScuro
+                                    BorderThickness: =0
+                                    DisplayMode: =If(locSolaLettura || !IsBlank(ric_lblErrori.Text) || !IsBlank(ric_lblErroriInvio.Text), DisplayMode.Disabled, DisplayMode.Edit)
+                              - ric_btnAnnullaRic:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Annulla richiesta"
+                                    OnSelect: |-
+                                      =UpdateContext({locDialogo: "annulla"})
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =170
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =colErrore
+                                    Color: =Color.White
+                                    HoverFill: =ColorFade(colErrore, -15%)
+                                    PressedFill: =ColorFade(colErrore, -25%)
+                                    BorderThickness: =0
+                                    Visible: =varIdModifica > 0 && varRicEdit.annullabile && IsBlank(LookUp(colMesiChiusi, Anno = varRicEdit.annoCompetenza && Mese = varRicEdit.meseCompetenza))
+                              - ric_btnTorna:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Torna alle richieste"
+                                    OnSelect: =Navigate(scrMieRichieste, ScreenTransition.None)
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =190
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =Color.White
+                                    Color: =colPrimario
+                                    HoverFill: =colPrimarioChiaro
+                                    PressedFill: =colPrimarioChiaro
+                                    HoverColor: =colPrimario
+                                    BorderColor: =colPrimario
+                                    BorderThickness: =1
+      - ric_btnEsegui:
+          Control: Classic/Button@2.2.0
+          Properties:
+            Text: |-
+              ="(procedura)"
+            OnSelect: |-
+              =// Procedura di salvataggio (locAzione = "bozza" oppure "invia"), richiamata con Select(ric_btnEsegui).
+              // Gli allegati diventano data URI: JSON(..., IncludeBinaryData) restituisce "data:...;base64,..." tra virgolette.
+              With(
+                  {
+                      attUri: If(locAllegatiInviati || CountRows(ric_attAttestato.Attachments) = 0, "", With({j: JSON(First(ric_attAttestato.Attachments).Value, JSONFormat.IncludeBinaryData)}, Mid(j, 2, Len(j) - 2))),
+                      attNome: If(locAllegatiInviati || CountRows(ric_attAttestato.Attachments) = 0, "", First(ric_attAttestato.Attachments).Name),
+                      altraUri: If(locAllegatiInviati || CountRows(ric_attAltraDoc.Attachments) = 0, "", With({j: JSON(First(ric_attAltraDoc.Attachments).Value, JSONFormat.IncludeBinaryData)}, Mid(j, 2, Len(j) - 2))),
+                      altraNome: If(locAllegatiInviati || CountRows(ric_attAltraDoc.Attachments) = 0, "", First(ric_attAltraDoc.Attachments).Name)
+                  },
+                  If(
+                      Len(attUri) > 14000000 || Len(altraUri) > 14000000,
+                      Notify("Ogni allegato può pesare al massimo 10 MB: riduci il file (es. PDF compresso) e riprova.", NotificationType.Error),
+                      Set(varCaricamento, true);
+                      Set(varMessaggioCaricamento, If(locAzione = "invia", "Invio al coordinatore in corso…", "Salvataggio della bozza in corso…"));
+                      With(
+                          {r: IfError(
+                              SDF_API03_SalvaRichiesta.Run(
+                                  JSON(
+                                      {
+                                          id: varIdModifica,
+                                          enteErogatore: ric_ddEnte.Selected.Value,
+                                          corsoId: If(ric_ddEnte.Selected.Value = "Datore di lavoro", Coalesce(ric_cmbCorsoCatalogo.Selected.ID, 0), ric_tglStorico.Value, Coalesce(ric_cmbCorsoStorico.Selected.ID, 0), 0),
+                                          nuovoCorso: If(
+                                              !(ric_ddEnte.Selected.Value = "Datore di lavoro") && !ric_tglStorico.Value,
+                                              {
+                                                  titolo: Trim(ric_txtTitoloLibero.Text),
+                                                  modalita: ric_ddModalita.Selected.Value,
+                                                  durata: Coalesce(Value(ric_txtDurataCorso.Text), 0),
+                                                  piuGiornate: ric_tglPiuGiornate.Value,
+                                                  nomeEnte: Trim(ric_txtNomeEnte.Text)
+                                              },
+                                              Blank()
+                                          ),
+                                          dataSessione: Text(ric_dtpData.SelectedDate, "yyyy-mm-dd"),
+                                          oraInizioSessione: ric_ddIniH.Selected.Value & ":" & ric_ddIniM.Selected.Value,
+                                          oraFineSessione: ric_ddFinH.Selected.Value & ":" & ric_ddFinM.Selected.Value,
+                                          oraIngresso: ric_ddIngH.Selected.Value & ":" & ric_ddIngM.Selected.Value,
+                                          oraUscita: ric_ddUscH.Selected.Value & ":" & ric_ddUscM.Selected.Value,
+                                          oreRetribuiteRichieste: Coalesce(Value(ric_txtOreRetribuite.Text), 0),
+                                          oreGettoneRichieste: If((ric_ddEnte.Selected.Value = "Datore di lavoro" && !IsBlank(ric_cmbCorsoCatalogo.Selected.ID) && !ric_cmbCorsoCatalogo.Selected.'Gettone previsto'), 0, Coalesce(Value(ric_txtOreGettone.Text), 0)),
+                                          noteLavoratore: Trim(ric_txtNote.Text),
+                                          confermaPartecipazione: ric_chkPartecipazione.Value,
+                                          confermaCorrettezza: ric_chkCorrettezza.Value,
+                                          autorizzazioneInvio: ric_chkAutorizzazione.Value,
+                                          confermaDuplicato: locConfermaDup
+                                      },
+                                      JSONFormat.IgnoreBinaryData
+                                  ),
+                                  locAzione,
+                                  attUri,
+                                  attNome,
+                                  altraUri,
+                                  altraNome
+                              ),
+                              {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                          )},
+                          With(
+                              {d: IfError(ParseJSON(r.dati), ParseJSON("{}"))},
+                              If(
+                                  r.esito = "OK",
+                                  With(
+                                      {avvisi: IfError(Concat(Table(d.avvisi) As a, Text(a.Value), " · "), "")},
+                                      Notify(
+                                          If(locAzione = "invia", "Richiesta " & Text(d.idRichiesta) & " inviata al coordinatore.", "Bozza " & Text(d.idRichiesta) & " salvata.") &
+                                          If(IsBlank(avvisi), "", " Attenzione: " & avvisi),
+                                          If(IsBlank(avvisi), NotificationType.Success, NotificationType.Warning)
+                                      )
+                                  );
+                                  With(
+                                      {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                      If(
+                                          rm.esito = "OK",
+                                          Set(varJsonMieRichieste, rm.dati);
+                                          Set(varMieCaricate, true),
+                                          Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                                      )
+                                  );
+                                  Reset(ric_attAttestato);
+                                  Reset(ric_attAltraDoc);
+                                  Set(varIdModifica, 0);
+                                  Navigate(scrMieRichieste, ScreenTransition.None),
+                                  // R7: il flusso chiede conferma del possibile duplicato (la bozza è già salvata)
+                                  Text(d.richiestaConferma) = "duplicato",
+                                  If(Coalesce(Value(d.id), 0) > 0, Set(varIdModifica, Value(d.id)); UpdateContext({locAllegatiInviati: true}));
+                                  UpdateContext({locMsgDialogo: r.messaggio, locDialogo: "duplicato"}),
+                                  Notify(r.messaggio, NotificationType.Error)
+                              )
+                          )
+                      );
+                      Set(varCaricamento, false)
+                  )
+              )
+            Size: =12
+            FontWeight: =FontWeight.Semibold
+            Height: =10
+            Width: =10
+            RadiusTopLeft: =6
+            RadiusTopRight: =6
+            RadiusBottomLeft: =6
+            RadiusBottomRight: =6
+            DisabledFill: =RGBA(200, 200, 200, 1)
+            DisabledColor: =RGBA(110, 110, 110, 1)
+            Fill: =colPrimario
+            Color: =Color.White
+            HoverFill: =colPrimarioScuro
+            PressedFill: =colPrimarioScuro
+            BorderThickness: =0
+            Visible: =false
+            X: =0
+            Y: =0
+      - ric_btnInizializza:
+          Control: Classic/Button@2.2.0
+          Properties:
+            Text: |-
+              ="(procedura)"
+            OnSelect: |-
+              =Set(varMenuAperto, false);
+              UpdateContext({locDialogo: "", locAzione: "", locConfermaDup: false, locAllegatiInviati: false, locMsgDialogo: ""});
+              ClearCollect(
+                  colMesiChiusi,
+                  ShowColumns(Filter('Chiusure mensili', 'Stato del periodo'.Value = "Chiuso"), Periodo, Anno, Mese)
+              );
+              // in modifica: la richiesta deve essere tra quelle caricate con SDF_API02
+              If(
+                  varIdModifica > 0 && IsBlank(LookUp(colMieRichieste, id = varIdModifica)),
+                  Set(varCaricamento, true);
+                  Set(varMessaggioCaricamento, "Caricamento della richiesta…");
+                  With(
+                      {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                      If(
+                          rm.esito = "OK",
+                          Set(varJsonMieRichieste, rm.dati);
+                          Set(varMieCaricate, true),
+                          Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                      )
+                  );
+                  Set(varCaricamento, false)
+              );
+              If(
+                  varIdModifica > 0 && IsBlank(LookUp(colMieRichieste, id = varIdModifica)),
+                  Notify("Richiesta non trovata: si apre un modulo vuoto.", NotificationType.Warning);
+                  Set(varIdModifica, 0)
+              );
+              Set(varRicEdit, LookUp(colMieRichieste, id = varIdModifica));
+              // sola lettura se lo stato non è modificabile (§1.5) o se il mese della richiesta è chiuso (R9)
+              UpdateContext({
+                  locSolaLettura: varIdModifica > 0 && (
+                      !varRicEdit.modificabile ||
+                      !IsBlank(LookUp(colMesiChiusi, Anno = varRicEdit.annoCompetenza && Mese = varRicEdit.meseCompetenza))
+                  )
+              });
+              Reset(ric_ddEnte);
+              Reset(ric_cmbCorsoCatalogo);
+              Reset(ric_tglStorico);
+              Reset(ric_cmbCorsoStorico);
+              Reset(ric_txtTitoloLibero);
+              Reset(ric_ddModalita);
+              Reset(ric_txtDurataCorso);
+              Reset(ric_tglPiuGiornate);
+              Reset(ric_txtNomeEnte);
+              Reset(ric_dtpData);
+              Reset(ric_ddIniH);
+              Reset(ric_ddIniM);
+              Reset(ric_ddFinH);
+              Reset(ric_ddFinM);
+              Reset(ric_ddIngH);
+              Reset(ric_ddIngM);
+              Reset(ric_ddUscH);
+              Reset(ric_ddUscM);
+              Reset(ric_txtOreRetribuite);
+              Reset(ric_txtOreGettone);
+              Reset(ric_txtNote);
+              Reset(ric_chkPartecipazione);
+              Reset(ric_chkCorrettezza);
+              Reset(ric_chkAutorizzazione);
+              Reset(ric_attAttestato);
+              Reset(ric_attAltraDoc)
+            Size: =12
+            FontWeight: =FontWeight.Semibold
+            Height: =10
+            Width: =10
+            RadiusTopLeft: =6
+            RadiusTopRight: =6
+            RadiusBottomLeft: =6
+            RadiusBottomRight: =6
+            DisabledFill: =RGBA(200, 200, 200, 1)
+            DisabledColor: =RGBA(110, 110, 110, 1)
+            Fill: =colPrimario
+            Color: =Color.White
+            HoverFill: =colPrimarioScuro
+            PressedFill: =colPrimarioScuro
+            BorderThickness: =0
+            Visible: =false
+            X: =0
+            Y: =0
+      - ric_conDialogo:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =!IsBlank(locDialogo)
+          Children:
+            - ric_rctDialogoVelo:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =colVelo
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - ric_conDialogoBox:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.Bold
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(520, Parent.Width - 32)
+                  Height: =If(ric_txtDialogoNota.Visible, 380, 290)
+                  PaddingTop: =20
+                  PaddingBottom: =20
+                  PaddingLeft: =20
+                  PaddingRight: =20
+                  RadiusTopLeft: =8
+                  RadiusTopRight: =8
+                  RadiusBottomLeft: =8
+                  RadiusBottomRight: =8
+                Children:
+                  - ric_lblDialogoTitolo:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =If(locDialogo = "duplicato", "Possibile duplicato", "Annullare la richiesta?")
+                        Size: =16
+                        Color: =colPrimario
+                        FontWeight: =FontWeight.Semibold
+                        Height: =32
+                        FillPortions: =0
+                  - ric_lblDialogoTesto:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =If(locDialogo = "duplicato", locMsgDialogo & " Se confermi, la richiesta viene inviata e segnalata come possibile duplicato al coordinatore e all’Ufficio HR.", "La richiesta " & varRicEdit.idRichiesta & " passerà allo stato «Annullata». Se era già stata inviata, il coordinatore riceverà un avviso.")
+                        Size: =12
+                        Color: =colTesto
+                        Wrap: =true
+                        FillPortions: =1
+                        VerticalAlign: =VerticalAlign.Top
+                        LayoutMinHeight: =60
+                  - ric_txtDialogoNota:
+                      Control: Classic/TextInput@2.3.2
+                      Properties:
+                        Default: |-
+                          =""
+                        HintText: |-
+                          ="Motivazione"
+                        Size: =12
+                        BorderColor: =colBordo
+                        Height: =80
+                        FillPortions: =0
+                        RadiusTopLeft: =4
+                        RadiusTopRight: =4
+                        RadiusBottomLeft: =4
+                        RadiusBottomRight: =4
+                        Mode: =TextMode.MultiLine
+                        Visible: =false
+                  - ric_conDialogoPulsanti:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutJustifyContent: =LayoutJustifyContent.End
+                        LayoutGap: =8
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(0, 0, 0, 0)
+                        Height: =44
+                        FillPortions: =0
+                      Children:
+                        - ric_btnDialogoAnnulla:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              Text: |-
+                                ="Annulla"
+                              OnSelect: |-
+                                =UpdateContext({locDialogo: ""})
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Height: =40
+                              Width: =140
+                              FillPortions: =0
+                              RadiusTopLeft: =6
+                              RadiusTopRight: =6
+                              RadiusBottomLeft: =6
+                              RadiusBottomRight: =6
+                              DisabledFill: =RGBA(200, 200, 200, 1)
+                              DisabledColor: =RGBA(110, 110, 110, 1)
+                              Fill: =Color.White
+                              Color: =colPrimario
+                              HoverFill: =colPrimarioChiaro
+                              PressedFill: =colPrimarioChiaro
+                              HoverColor: =colPrimario
+                              BorderColor: =colPrimario
+                              BorderThickness: =1
+                        - ric_btnDialogoConferma:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              Text: =If(locDialogo = "duplicato", "Conferma invio", "Sì, annulla")
+                              OnSelect: |-
+                                =If(
+                                    locDialogo = "duplicato",
+                                    // conferma del possibile duplicato: si ripete l'invio con confermaDuplicato = true
+                                    UpdateContext({locConfermaDup: true, locAzione: "invia", locDialogo: ""});
+                                    Select(ric_btnEsegui),
+                                    Set(varCaricamento, true);
+                                    Set(varMessaggioCaricamento, "Annullamento in corso…");
+                                    With(
+                                        {r: IfError(
+                                            SDF_API03_SalvaRichiesta.Run(JSON({id: varIdModifica}, JSONFormat.IgnoreBinaryData), "annulla", "", "", "", ""),
+                                            {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                                        )},
+                                        If(
+                                            r.esito = "OK",
+                                            Notify("Richiesta annullata.", NotificationType.Success);
+                                            With(
+                                                {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                                If(
+                                                    rm.esito = "OK",
+                                                    Set(varJsonMieRichieste, rm.dati);
+                                                    Set(varMieCaricate, true),
+                                                    Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                                                )
+                                            );
+                                            UpdateContext({locDialogo: ""});
+                                            Set(varIdModifica, 0);
+                                            Navigate(scrMieRichieste, ScreenTransition.None),
+                                            Notify(r.messaggio, NotificationType.Error)
+                                        )
+                                    );
+                                    Set(varCaricamento, false)
+                                )
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Height: =40
+                              Width: =180
+                              FillPortions: =0
+                              RadiusTopLeft: =6
+                              RadiusTopRight: =6
+                              RadiusBottomLeft: =6
+                              RadiusBottomRight: =6
+                              DisabledFill: =RGBA(200, 200, 200, 1)
+                              DisabledColor: =RGBA(110, 110, 110, 1)
+                              Fill: =If(locDialogo = "duplicato", colPrimario, colErrore)
+                              Color: =Color.White
+                              HoverFill: =colPrimarioScuro
+                              PressedFill: =colPrimarioScuro
+                              BorderThickness: =0
+                              DisplayMode: =If(true, DisplayMode.Edit, DisplayMode.Disabled)
+      - ric_conCaricamento:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =varCaricamento
+          Children:
+            - ric_rctCaricamento:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =RGBA(255, 255, 255, 0.65)
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - ric_lblCaricamento:
+                Control: Label@2.5.1
+                Properties:
+                  Text: =Coalesce(varMessaggioCaricamento, "Caricamento in corso…") & Char(10) & "Attendere qualche secondo."
+                  Size: =14
+                  Color: =colPrimario
+                  FontWeight: =FontWeight.Semibold
+                  Align: =Align.Center
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(360, Parent.Width - 32)
+                  Height: =96
+                  Wrap: =true
+                  BorderColor: =colBordo
+                  BorderThickness: =1

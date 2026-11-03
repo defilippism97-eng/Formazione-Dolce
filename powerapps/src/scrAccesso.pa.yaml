@@ -1,0 +1,402 @@
+# =============================================================================
+#  Gestione ore formazione – Società Dolce · schermata scrAccesso
+#  0 – Accesso / benvenuto (tutti)
+# -----------------------------------------------------------------------------
+#  Formato: sorgente YAML di Power Apps Studio (Copia codice / Incolla codice).
+#  Come incollarla: vedere powerapps/README.md. Le formule sono in notazione
+#  inglese (separatore "," e concatenazione ";"): Studio in italiano le mostra
+#  con ";" e ";;" automaticamente.
+#  Dati: SDF_API01_Profilo (nessuna lettura diretta di liste).
+# =============================================================================
+Screens:
+  scrAccesso:
+    Properties:
+      Fill: =colSfondo
+      OnVisible: |-
+        =Set(varMenuAperto, false);
+        // 1) carica il profilo una sola volta per sessione (SDF_API01_Profilo)
+        If(
+            !varProfiloCaricato,
+            Set(varCaricamento, true);
+            Set(varMessaggioCaricamento, "Caricamento del profilo…");
+            With(
+                {rp: IfError(SDF_API01_Profilo.Run(), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                If(
+                    rp.esito = "OK",
+                    Set(varJsonProfilo, rp.dati);
+                    Set(varErroreProfilo, "");
+                    Set(varProfiloCaricato, true),
+                    Set(varErroreProfilo, Coalesce(rp.messaggio, testoErroreRete))
+                )
+            );
+            Set(varCaricamento, false)
+        );
+        // 2) primo accesso del lavoratore -> profilo obbligatorio; collegamento diretto -> dettaglio
+        If(
+            varProfiloCaricato && isLavoratore && !recProfilo.profiloCompleto,
+            Navigate(scrProfilo, ScreenTransition.None),
+            varProfiloCaricato && haRuolo && !IsBlank(Param("richiesta")) && !varParamGestito,
+            Set(varParamGestito, true);
+            Set(varDaLinkDiretto, true);
+            Set(varIdDettaglio, Value(Param("richiesta")));
+            Navigate(scrDettaglio, ScreenTransition.None)
+        )
+    Children:
+      - acc_conRadice:
+          Control: GroupContainer@1.3.0
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutJustifyContent: =LayoutJustifyContent.Start
+            LayoutGap: =0
+            DropShadow: =DropShadow.None
+            Fill: =colSfondo
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+          Children:
+            - acc_conHeader:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.None
+                  Fill: =colPrimario
+                  Height: =56
+                  FillPortions: =0
+                  PaddingLeft: =12
+                  PaddingRight: =16
+                Children:
+                  - acc_lblTitoloApp:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Gestione ore formazione"
+                        Size: =16
+                        Color: =Color.White
+                        FontWeight: =FontWeight.Semibold
+                        FillPortions: =1
+                        Height: =40
+                        LayoutMinWidth: =150
+                  - acc_lblUtente:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =User().FullName & If(haRuolo, " · " & ruoloApp, "")
+                        Size: =11
+                        Color: =Color.White
+                        Align: =Align.Right
+                        Width: =340
+                        Height: =40
+                        FillPortions: =0
+                        Visible: =!isMobile
+            - acc_conCorpo:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =0
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(0, 0, 0, 0)
+                  FillPortions: =1
+                Children:
+                  - acc_conContenuto:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =12
+                        DropShadow: =DropShadow.None
+                        Fill: =colSfondo
+                        FillPortions: =1
+                        Visible: =true
+                        PaddingTop: =32
+                        PaddingBottom: =32
+                        PaddingLeft: =If(isMobile, 12, 24)
+                        PaddingRight: =If(isMobile, 12, 24)
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                      Children:
+                        - acc_conCard:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + acc_lblBenvenuto.Height + 8 + acc_lblSocieta.Height + 8 + acc_lblSpiegazione.Height + 8 + acc_rctSep1.Height + 8 + acc_lblNome.Height + 8 + acc_lblEmail.Height + 8 + If(acc_lblStato.Visible, acc_lblStato.Height + 8, 0) + acc_conPulsanti.Height + 8 + acc_lblPassword.Height + 8 + acc_lblPrivacy.Height + 8
+                              Width: =Min(560, Parent.Width - 24)
+                              AlignInContainer: =AlignInContainer.Center
+                            Children:
+                              - acc_lblBenvenuto:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Benvenuto in Gestione ore formazione"
+                                    Size: =20
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =64
+                                    Wrap: =true
+                                    FillPortions: =0
+                              - acc_lblSocieta:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Società Dolce · Ufficio HR/Formazione"
+                                    Size: =12
+                                    Color: =colTestoSecondario
+                                    Height: =24
+                                    FillPortions: =0
+                              - acc_lblSpiegazione:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="L’accesso avviene con il tuo account Microsoft 365, lo stesso della intranet: non devi inserire nome utente e password nell’app. Se non riesci ad accedere a Microsoft 365, reimposta la password dal collegamento qui sotto."
+                                    Size: =12
+                                    Color: =colTestoSecondario
+                                    AutoHeight: =true
+                                    Wrap: =true
+                                    FillPortions: =0
+                                    Height: =60
+                              - acc_rctSep1:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    FillPortions: =0
+                              - acc_lblNome:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Utente: " & User().FullName
+                                    Size: =13
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =28
+                                    FillPortions: =0
+                              - acc_lblEmail:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Account: " & User().Email
+                                    Size: =12
+                                    Color: =colTestoSecondario
+                                    Height: =24
+                                    FillPortions: =0
+                              - acc_lblStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =If(
+                                          varCaricamento, "Caricamento del profilo in corso…",
+                                          !IsBlank(varErroreProfilo), "Non è stato possibile caricare il profilo: " & varErroreProfilo,
+                                          !varProfiloCaricato, "",
+                                          !haRuolo, "Utente non censito: contatta l’Ufficio HR/Formazione.",
+                                          isLavoratore && !recProfilo.profiloCompleto, "Primo accesso: completa il profilo con e-mail personale e codice fiscale.",
+                                          "Ruolo nell’applicativo: " & ruoloApp & If(testoRuoli <> ruoloApp, " (abilitato come: " & testoRuoli & ")", "")
+                                      )
+                                    Size: =12
+                                    Color: |-
+                                      =If(
+                                          !IsBlank(varErroreProfilo) || (varProfiloCaricato && !haRuolo), colErrore,
+                                          varProfiloCaricato && isLavoratore && !recProfilo.profiloCompleto, colAvviso,
+                                          colSuccesso
+                                      )
+                                    FontWeight: =FontWeight.Semibold
+                                    AutoHeight: =true
+                                    Wrap: =true
+                                    Height: =24
+                                    FillPortions: =0
+                                    Visible: =!IsBlank(Self.Text)
+                              - acc_conPulsanti:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Horizontal
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =8
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    Height: =44
+                                    FillPortions: =0
+                                  Children:
+                                    - acc_btnEntra:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Entra"
+                                          OnSelect: |-
+                                            =Set(varMenuAperto, false);
+                                            Navigate(scrHome, ScreenTransition.Fade)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =160
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colPrimario
+                                          Color: =Color.White
+                                          HoverFill: =colPrimarioScuro
+                                          PressedFill: =colPrimarioScuro
+                                          BorderThickness: =0
+                                          Visible: =varProfiloCaricato && haRuolo && (!isLavoratore || recProfilo.profiloCompleto)
+                                    - acc_btnProfilo:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Completa il profilo"
+                                          OnSelect: =Navigate(scrProfilo, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =200
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colPrimario
+                                          Color: =Color.White
+                                          HoverFill: =colPrimarioScuro
+                                          PressedFill: =colPrimarioScuro
+                                          BorderThickness: =0
+                                          Visible: =varProfiloCaricato && isLavoratore && !recProfilo.profiloCompleto
+                                    - acc_btnRiprova:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Riprova"
+                                          OnSelect: |-
+                                            =Set(varProfiloCaricato, false);
+                                            Set(varCaricamento, true);
+                                            Set(varMessaggioCaricamento, "Caricamento del profilo…");
+                                            With(
+                                                {rp: IfError(SDF_API01_Profilo.Run(), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                                If(
+                                                    rp.esito = "OK",
+                                                    Set(varJsonProfilo, rp.dati);
+                                                    Set(varErroreProfilo, "");
+                                                    Set(varProfiloCaricato, true),
+                                                    Set(varErroreProfilo, Coalesce(rp.messaggio, testoErroreRete))
+                                                )
+                                            );
+                                            Set(varCaricamento, false);
+                                            If(
+                                                varProfiloCaricato && isLavoratore && !recProfilo.profiloCompleto,
+                                                Navigate(scrProfilo, ScreenTransition.None),
+                                                varProfiloCaricato && haRuolo && !IsBlank(Param("richiesta")) && !varParamGestito,
+                                                Set(varParamGestito, true);
+                                                Set(varDaLinkDiretto, true);
+                                                Set(varIdDettaglio, Value(Param("richiesta")));
+                                                Navigate(scrDettaglio, ScreenTransition.None)
+                                            )
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =140
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =Color.White
+                                          Color: =colPrimario
+                                          HoverFill: =colPrimarioChiaro
+                                          PressedFill: =colPrimarioChiaro
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =1
+                                          Visible: =!IsBlank(varErroreProfilo)
+                              - acc_lblPassword:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Hai dimenticato la password?"
+                                    Size: =12
+                                    Color: =colInfo
+                                    Underline: =true
+                                    OnSelect: =Launch(linkResetPassword)
+                                    Height: =28
+                                    FillPortions: =0
+                                    Tooltip: |-
+                                      ="Apre la pagina di reimpostazione della password: " & linkResetPassword
+                              - acc_lblPrivacy:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="I dati sono trattati nel rispetto della normativa sulla protezione dei dati personali (Reg. UE 2016/679). Ognuno vede solo le informazioni che gli spettano."
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    AutoHeight: =true
+                                    Wrap: =true
+                                    FillPortions: =0
+                                    Height: =20
+      - acc_conCaricamento:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =varCaricamento
+          Children:
+            - acc_rctCaricamento:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =RGBA(255, 255, 255, 0.65)
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - acc_lblCaricamento:
+                Control: Label@2.5.1
+                Properties:
+                  Text: =Coalesce(varMessaggioCaricamento, "Caricamento in corso…") & Char(10) & "Attendere qualche secondo."
+                  Size: =14
+                  Color: =colPrimario
+                  FontWeight: =FontWeight.Semibold
+                  Align: =Align.Center
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(360, Parent.Width - 32)
+                  Height: =96
+                  Wrap: =true
+                  BorderColor: =colBordo
+                  BorderThickness: =1

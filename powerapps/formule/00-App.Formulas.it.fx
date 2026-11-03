@@ -1,0 +1,457 @@
+// #############################################################################
+//  GESTIONE ORE FORMAZIONE – Società Dolce
+//  00-App.Formulas.it.fx – STESSO contenuto di 00-App.Formulas.fx in notazione italiana
+//
+//  Usare questo file se Power Apps Studio è in italiano (la barra della formula separa gli
+//  argomenti con «;» e concatena le azioni con «;;»). Se Studio è in inglese usare il file .fx.
+//
+//  Le formule sono identiche a quelle dei file powerapps/src/*.pa.yaml (generati
+//  dalla stessa fonte). Notazione inglese: in Studio con lingua italiana i separatori
+//  diventano «;» (argomenti) e «;;» (concatenazione di azioni).
+// #############################################################################
+
+// =====================================================================
+//  GESTIONE ORE FORMAZIONE – Società Dolce
+//  Formule con nome (App.Formulas). Si ricalcolano da sole quando cambiano
+//  le variabili da cui dipendono (es. varJsonProfilo, varJsonMieRichieste).
+//  Nessuna di queste formule legge liste SharePoint riservate a HR.
+// =====================================================================
+
+// ---------- Colori: sostituire con i colori ufficiali Società Dolce ----------
+colPrimario = RGBA(0; 94; 125; 1);;          // sostituire con i colori ufficiali Società Dolce
+colPrimarioScuro = RGBA(0; 70; 94; 1);;
+colPrimarioChiaro = RGBA(0; 94; 125; 0,10);;
+colAccento = RGBA(232; 119; 34; 1);;
+colSfondo = RGBA(244; 246; 248; 1);;
+colSuperficie = RGBA(255; 255; 255; 1);;
+colTesto = RGBA(32; 31; 30; 1);;
+colTestoSecondario = RGBA(96; 94; 92; 1);;
+colBordo = RGBA(218; 220; 224; 1);;
+colSuccesso = RGBA(16; 124; 16; 1);;
+colErrore = RGBA(209; 52; 56; 1);;
+colAvviso = RGBA(202; 80; 16; 1);;
+colInfo = RGBA(0; 120; 212; 1);;
+colVelo = RGBA(0; 0; 0; 0,45);;
+
+// ---------- Layout responsive ----------
+isMobile = App.Width < 700;;
+
+// ---------- Costanti ----------
+linkResetPassword = "https://password.societadolce.it/";;
+testoErroreRete = "Non è stato possibile contattare il servizio. Controlla la connessione e riprova; se il problema continua contatta l’Ufficio HR/Formazione.";;
+prefissoClaims = "i:0#.f|membership|";;
+jsonVuotoMie = "{""richieste"":[]}";;
+jsonVuotoTeam = "{""richieste"":[],""lavoratori"":[]}";;
+jsonVuotoDettaglio = "{""richiesta"":{},""permessi"":{},""storico"":[]}";;
+
+// ---------- Stati della richiesta: colore (schema.yaml -> colori_stato) e regole (§1.5) ----------
+//  Gruppo: bozza | attesa | integrazione | respinta | approvata | annullata
+//  Aperta = non ancora validata né conclusa (serve alla chiusura del mese)
+tblStati = Table(
+    {Stato: "Bozza"; Colore: ColorValue("#8A8886"); Gruppo: "bozza"; ModificabileLavoratore: true; AnnullabileLavoratore: true; Aperta: true; ApprovataCoord: false; ValidataHR: false};
+    {Stato: "Inviata al coordinatore"; Colore: ColorValue("#0078D4"); Gruppo: "attesa"; ModificabileLavoratore: false; AnnullabileLavoratore: false; Aperta: true; ApprovataCoord: false; ValidataHR: false};
+    {Stato: "In attesa del coordinatore"; Colore: ColorValue("#0078D4"); Gruppo: "attesa"; ModificabileLavoratore: false; AnnullabileLavoratore: true; Aperta: true; ApprovataCoord: false; ValidataHR: false};
+    {Stato: "Integrazione richiesta dal coordinatore"; Colore: ColorValue("#CA5010"); Gruppo: "integrazione"; ModificabileLavoratore: true; AnnullabileLavoratore: true; Aperta: true; ApprovataCoord: false; ValidataHR: false};
+    {Stato: "Respinta dal coordinatore"; Colore: ColorValue("#D13438"); Gruppo: "respinta"; ModificabileLavoratore: false; AnnullabileLavoratore: false; Aperta: false; ApprovataCoord: false; ValidataHR: false};
+    {Stato: "Approvata dal coordinatore"; Colore: ColorValue("#498205"); Gruppo: "attesa"; ModificabileLavoratore: false; AnnullabileLavoratore: false; Aperta: true; ApprovataCoord: true; ValidataHR: false};
+    {Stato: "In attesa di validazione HR"; Colore: ColorValue("#8764B8"); Gruppo: "attesa"; ModificabileLavoratore: false; AnnullabileLavoratore: false; Aperta: true; ApprovataCoord: true; ValidataHR: false};
+    {Stato: "Integrazione richiesta da HR"; Colore: ColorValue("#CA5010"); Gruppo: "integrazione"; ModificabileLavoratore: true; AnnullabileLavoratore: true; Aperta: true; ApprovataCoord: true; ValidataHR: false};
+    {Stato: "Respinta da HR"; Colore: ColorValue("#D13438"); Gruppo: "respinta"; ModificabileLavoratore: false; AnnullabileLavoratore: false; Aperta: false; ApprovataCoord: true; ValidataHR: false};
+    {Stato: "Validata da HR"; Colore: ColorValue("#107C10"); Gruppo: "approvata"; ModificabileLavoratore: false; AnnullabileLavoratore: false; Aperta: false; ApprovataCoord: true; ValidataHR: true};
+    {Stato: "Inclusa nel riepilogo mensile"; Colore: ColorValue("#005B70"); Gruppo: "approvata"; ModificabileLavoratore: false; AnnullabileLavoratore: false; Aperta: false; ApprovataCoord: true; ValidataHR: true};
+    {Stato: "Inviata a Payroll"; Colore: ColorValue("#004E8C"); Gruppo: "approvata"; ModificabileLavoratore: false; AnnullabileLavoratore: false; Aperta: false; ApprovataCoord: true; ValidataHR: true};
+    {Stato: "Annullata"; Colore: ColorValue("#605E5C"); Gruppo: "annullata"; ModificabileLavoratore: false; AnnullabileLavoratore: false; Aperta: false; ApprovataCoord: false; ValidataHR: false}
+);;
+
+// ---------- Tabelle per i menu a discesa ----------
+tblMesi = Table(
+    {Value: "Gennaio"; Num: 1};
+    {Value: "Febbraio"; Num: 2};
+    {Value: "Marzo"; Num: 3};
+    {Value: "Aprile"; Num: 4};
+    {Value: "Maggio"; Num: 5};
+    {Value: "Giugno"; Num: 6};
+    {Value: "Luglio"; Num: 7};
+    {Value: "Agosto"; Num: 8};
+    {Value: "Settembre"; Num: 9};
+    {Value: "Ottobre"; Num: 10};
+    {Value: "Novembre"; Num: 11};
+    {Value: "Dicembre"; Num: 12}
+);;
+tblMesiFiltro = Table(
+    {Value: "Tutti i mesi"; Num: 0};
+    {Value: "Gennaio"; Num: 1};
+    {Value: "Febbraio"; Num: 2};
+    {Value: "Marzo"; Num: 3};
+    {Value: "Aprile"; Num: 4};
+    {Value: "Maggio"; Num: 5};
+    {Value: "Giugno"; Num: 6};
+    {Value: "Luglio"; Num: 7};
+    {Value: "Agosto"; Num: 8};
+    {Value: "Settembre"; Num: 9};
+    {Value: "Ottobre"; Num: 10};
+    {Value: "Novembre"; Num: 11};
+    {Value: "Dicembre"; Num: 12}
+);;
+tblAnni = ForAll(Sequence(4; 0) As i; {Value: Text(Year(Today()) - i.Value); Num: Year(Today()) - i.Value});;
+tblAnniFiltro = ForAll(
+    Sequence(5; 0) As i;
+    If(i.Value = 0; {Value: "Tutti gli anni"; Num: 0}; {Value: Text(Year(Today()) + 1 - i.Value); Num: Year(Today()) + 1 - i.Value})
+);;
+tblOre = ForAll(Sequence(24; 0) As h; {Value: Text(h.Value; "00")});;
+tblMinuti = ForAll(Sequence(12; 0; 5) As m; {Value: Text(m.Value; "00")});;
+tblEnti = ["Datore di lavoro"; "Committente o altro soggetto"];;
+tblModalita = ["In presenza"; "A distanza - sincrona"; "A distanza - asincrona"];;
+tblFiltroStatiMie = Table(
+    {Value: "Tutti gli stati"; Gruppo: "tutti"};
+    {Value: "In attesa o da integrare"; Gruppo: "attesa_integr"};
+    {Value: "Approvate"; Gruppo: "approvata"};
+    {Value: "Bozze"; Gruppo: "bozza"};
+    {Value: "Respinte"; Gruppo: "respinta"};
+    {Value: "Annullate"; Gruppo: "annullata"}
+);;
+
+// ---------- Profilo dell'utente (risposta di SDF_API01_Profilo in varJsonProfilo) ----------
+recProfilo = With(
+    {p: ParseJSON(Coalesce(varJsonProfilo; "{}"))};
+    With(
+        {
+            ru: If(IsBlank(p.ruoli); ParseJSON("{}"); p.ruoli);
+            l: If(IsBlank(p.lavoratore); ParseJSON("{}"); p.lavoratore)
+        };
+        {
+            login: Lower(Coalesce(Text(p.login); User().Email));
+            nomeVisualizzato: Coalesce(Text(p.nomeVisualizzato); User().FullName);
+            ruoloLavoratore: Coalesce(Boolean(ru.lavoratore); false);
+            ruoloCoordinatore: Coalesce(Boolean(ru.coordinatore); false);
+            ruoloHR: Coalesce(Boolean(ru.hr); false);
+            ruoloAmministratore: Coalesce(Boolean(ru.amministratore); false);
+            profiloCompleto: Coalesce(Boolean(p.profiloCompleto); false);
+            censito: !IsBlank(p.lavoratore);
+            lavId: Coalesce(Value(l.id); 0);
+            cognome: Text(l.cognome);
+            nome: Text(l.nome);
+            emailAziendale: Text(l.emailAziendale);
+            emailPersonale: Text(l.emailPersonale);
+            cfRegistrato: Coalesce(Boolean(l.cfRegistrato); false);
+            cfMascherato: Text(l.cfMascherato);
+            area: Text(l.area);
+            servizio: Text(l.servizio);
+            centroDiCosto: Text(l.centroDiCosto);
+            strutturaId: Coalesce(Value(l.strutturaId); 0);
+            coordinatoreLogin: Lower(Text(l.coordinatoreLogin));
+            coordinatoreNome: Text(l.coordinatoreNome);
+            coordinatoreEmail: Text(l.coordinatoreEmail);
+            statoLavoratore: Text(l.stato);
+            segnalazioneAperta: Coalesce(Boolean(l.segnalazioneAperta); false)
+        }
+    )
+);;
+
+// ---------- Ruoli (01-architettura §1.4): l'app mostra il più alto e abilita tutti quelli posseduti ----------
+isLavoratore = recProfilo.ruoloLavoratore;;
+isCoord = recProfilo.ruoloCoordinatore;;
+isAdmin = recProfilo.ruoloAmministratore;;
+isHR = recProfilo.ruoloHR || recProfilo.ruoloAmministratore;;   // l'Amministratore ha anche le funzioni HR
+haRuolo = isLavoratore || isCoord || isHR;;
+ruoloApp = If(
+    isAdmin; "Amministratore";
+    recProfilo.ruoloHR; "Formazione HR";
+    isCoord; "Coordinatore";
+    isLavoratore; "Lavoratore";
+    "Nessun ruolo"
+);;
+testoRuoli = Concat(
+    Filter(
+        Table(
+            {R: "Lavoratore"; A: isLavoratore};
+            {R: "Coordinatore"; A: isCoord};
+            {R: "Formazione HR"; A: recProfilo.ruoloHR};
+            {R: "Amministratore"; A: isAdmin}
+        );
+        A
+    );
+    R;
+    ", "
+);;
+
+// ---------- Menu laterale filtrato per ruolo ----------
+tblMenu = Filter(
+    Table(
+        {Chiave: "home"; Voce: "Home"; Icona: Icon.Home; Abilitata: true};
+        {Chiave: "mie"; Voce: "Le mie richieste"; Icona: Icon.DocumentWithContent; Abilitata: isLavoratore};
+        {Chiave: "nuova"; Voce: "Inserisci formazione"; Icona: Icon.Add; Abilitata: isLavoratore};
+        {Chiave: "team"; Voce: "Richieste del team"; Icona: Icon.People; Abilitata: isCoord};
+        {Chiave: "validazione"; Voce: "Validazione HR"; Icona: Icon.CheckBadge; Abilitata: isHR};
+        {Chiave: "riepilogo"; Voce: "Riepilogo mensile"; Icona: Icon.DetailList; Abilitata: haRuolo};
+        {Chiave: "chiusura"; Voce: "Chiusura mese e paghe"; Icona: Icon.Lock; Abilitata: isHR};
+        {Chiave: "admin"; Voce: "Amministrazione"; Icona: Icon.Settings; Abilitata: isAdmin};
+        {Chiave: "profilo"; Voce: "Il mio profilo"; Icona: Icon.Person; Abilitata: isLavoratore}
+    );
+    Abilitata
+);;
+tblPerimetriRiep = Filter(
+    Table(
+        {Value: "Le mie richieste"; Chiave: "personale"; Abilitato: isLavoratore};
+        {Value: "Il mio team"; Chiave: "team"; Abilitato: isCoord};
+        {Value: "Tutta l’azienda (HR)"; Chiave: "hr"; Abilitato: isHR}
+    );
+    Abilitato
+);;
+
+// ---------- Richieste del lavoratore (risposta di SDF_API02_MieRichieste in varJsonMieRichieste) ----------
+colMieRichieste = ForAll(
+    Table(ParseJSON(Coalesce(varJsonMieRichieste; jsonVuotoMie)).richieste) As x;
+    {
+        id: Value(x.Value.id);
+        idRichiesta: Text(x.Value.idRichiesta);
+        lavoratoreLogin: Lower(Text(x.Value.lavoratoreLogin));
+        lavoratoreId: Value(x.Value.lavoratoreId);
+        cognome: Text(x.Value.cognome);
+        nome: Text(x.Value.nome);
+        nominativo: Trim(Text(x.Value.cognome) & " " & Text(x.Value.nome));
+        emailPersonale: Text(x.Value.emailPersonale);
+        area: Text(x.Value.area);
+        servizio: Text(x.Value.servizio);
+        centroDiCosto: Text(x.Value.centroDiCosto);
+        strutturaId: Value(x.Value.strutturaId);
+        coordinatoreLogin: Lower(Text(x.Value.coordinatoreLogin));
+        coordinatoreNome: Text(x.Value.coordinatoreNome);
+        coordinatoreEmail: Text(x.Value.coordinatoreEmail);
+        corsoId: Coalesce(Value(x.Value.corsoId); 0);
+        codiceCorso: Text(x.Value.codiceCorso);
+        titoloCorso: Text(x.Value.titoloCorso);
+        titoloCorsoLibero: Text(x.Value.titoloCorsoLibero);
+        titolo: Coalesce(Text(x.Value.titoloCorso); Text(x.Value.titoloCorsoLibero));
+        durataCorso: Coalesce(Value(x.Value.durataCorso); 0);
+        enteErogatore: Text(x.Value.enteErogatore);
+        modalita: Text(x.Value.modalita);
+        piuGiornate: Coalesce(Boolean(x.Value.piuGiornate); false);
+        dataSessione: DateValue(x.Value.dataSessione);
+        oraInizioSessione: Text(x.Value.oraInizioSessione);
+        oraFineSessione: Text(x.Value.oraFineSessione);
+        durataSessione: Coalesce(Value(x.Value.durataSessione); 0);
+        oraIngresso: Text(x.Value.oraIngresso);
+        oraUscita: Text(x.Value.oraUscita);
+        oreFrequentate: Coalesce(Value(x.Value.oreFrequentate); 0);
+        oreRetribuiteRichieste: Coalesce(Value(x.Value.oreRetribuiteRichieste); 0);
+        oreGettoneRichieste: Coalesce(Value(x.Value.oreGettoneRichieste); 0);
+        oreRichiesteTotali: Coalesce(Value(x.Value.oreRetribuiteRichieste); 0) + Coalesce(Value(x.Value.oreGettoneRichieste); 0);
+        oreRetribuiteCoord: Coalesce(Value(x.Value.oreRetribuiteCoord); 0);
+        oreGettoneCoord: Coalesce(Value(x.Value.oreGettoneCoord); 0);
+        oreRetribuiteHR: Coalesce(Value(x.Value.oreRetribuiteHR); 0);
+        oreGettoneHR: Coalesce(Value(x.Value.oreGettoneHR); 0);
+        attestatoUrl: Text(x.Value.attestatoUrl);
+        altraDocUrl: Text(x.Value.altraDocUrl);
+        attestatoPresente: Coalesce(Boolean(x.Value.attestatoPresente); false);
+        noteLavoratore: Text(x.Value.noteLavoratore);
+        noteCoordinatore: Text(x.Value.noteCoordinatore);
+        noteHR: Text(x.Value.noteHR);
+        stato: Text(x.Value.stato);
+        dataInvio: DateTimeValue(x.Value.dataInvio);
+        dataApprovazioneCoord: DateTimeValue(x.Value.dataApprovazioneCoord);
+        dataValidazioneHR: DateTimeValue(x.Value.dataValidazioneHR);
+        meseCompetenza: Coalesce(Value(x.Value.meseCompetenza); 0);
+        annoCompetenza: Coalesce(Value(x.Value.annoCompetenza); 0);
+        periodoChiusura: Text(x.Value.periodoChiusura);
+        confermaPartecipazione: Coalesce(Boolean(x.Value.confermaPartecipazione); false);
+        confermaCorrettezza: Coalesce(Boolean(x.Value.confermaCorrettezza); false);
+        autorizzazioneInvio: Coalesce(Boolean(x.Value.autorizzazioneInvio); false);
+        possibileDuplicato: Coalesce(Boolean(x.Value.possibileDuplicato); false);
+        anomalie: Text(x.Value.anomalie);
+        giorniAttesa: Coalesce(Value(x.Value.giorniAttesa); 0);
+        segnalataHR: Coalesce(Boolean(x.Value.segnalataHR); false);
+        ultimaModificaDa: Text(x.Value.ultimaModificaDa);
+        creato: DateTimeValue(x.Value.creato);
+        modificato: DateTimeValue(x.Value.modificato);
+        colore: Coalesce(LookUp(tblStati; Stato = Text(x.Value.stato); Colore); colTestoSecondario);
+        gruppo: Coalesce(LookUp(tblStati; Stato = Text(x.Value.stato); Gruppo); "altro");
+        modificabile: Coalesce(LookUp(tblStati; Stato = Text(x.Value.stato); ModificabileLavoratore); false);
+        annullabile: Coalesce(LookUp(tblStati; Stato = Text(x.Value.stato); AnnullabileLavoratore); false)
+    }
+);;
+
+// ---------- Richieste e lavoratori del team (risposta di SDF_API05_RichiesteTeam in varJsonTeam) ----------
+colRichiesteTeam = ForAll(
+    Table(ParseJSON(Coalesce(varJsonTeam; jsonVuotoTeam)).richieste) As x;
+    {
+        id: Value(x.Value.id);
+        idRichiesta: Text(x.Value.idRichiesta);
+        lavoratoreLogin: Lower(Text(x.Value.lavoratoreLogin));
+        lavoratoreId: Value(x.Value.lavoratoreId);
+        cognome: Text(x.Value.cognome);
+        nome: Text(x.Value.nome);
+        nominativo: Trim(Text(x.Value.cognome) & " " & Text(x.Value.nome));
+        emailPersonale: Text(x.Value.emailPersonale);
+        area: Text(x.Value.area);
+        servizio: Text(x.Value.servizio);
+        centroDiCosto: Text(x.Value.centroDiCosto);
+        strutturaId: Value(x.Value.strutturaId);
+        coordinatoreLogin: Lower(Text(x.Value.coordinatoreLogin));
+        coordinatoreNome: Text(x.Value.coordinatoreNome);
+        coordinatoreEmail: Text(x.Value.coordinatoreEmail);
+        corsoId: Coalesce(Value(x.Value.corsoId); 0);
+        codiceCorso: Text(x.Value.codiceCorso);
+        titoloCorso: Text(x.Value.titoloCorso);
+        titoloCorsoLibero: Text(x.Value.titoloCorsoLibero);
+        titolo: Coalesce(Text(x.Value.titoloCorso); Text(x.Value.titoloCorsoLibero));
+        durataCorso: Coalesce(Value(x.Value.durataCorso); 0);
+        enteErogatore: Text(x.Value.enteErogatore);
+        modalita: Text(x.Value.modalita);
+        piuGiornate: Coalesce(Boolean(x.Value.piuGiornate); false);
+        dataSessione: DateValue(x.Value.dataSessione);
+        oraInizioSessione: Text(x.Value.oraInizioSessione);
+        oraFineSessione: Text(x.Value.oraFineSessione);
+        durataSessione: Coalesce(Value(x.Value.durataSessione); 0);
+        oraIngresso: Text(x.Value.oraIngresso);
+        oraUscita: Text(x.Value.oraUscita);
+        oreFrequentate: Coalesce(Value(x.Value.oreFrequentate); 0);
+        oreRetribuiteRichieste: Coalesce(Value(x.Value.oreRetribuiteRichieste); 0);
+        oreGettoneRichieste: Coalesce(Value(x.Value.oreGettoneRichieste); 0);
+        oreRichiesteTotali: Coalesce(Value(x.Value.oreRetribuiteRichieste); 0) + Coalesce(Value(x.Value.oreGettoneRichieste); 0);
+        oreRetribuiteCoord: Coalesce(Value(x.Value.oreRetribuiteCoord); 0);
+        oreGettoneCoord: Coalesce(Value(x.Value.oreGettoneCoord); 0);
+        oreRetribuiteHR: Coalesce(Value(x.Value.oreRetribuiteHR); 0);
+        oreGettoneHR: Coalesce(Value(x.Value.oreGettoneHR); 0);
+        attestatoUrl: Text(x.Value.attestatoUrl);
+        altraDocUrl: Text(x.Value.altraDocUrl);
+        attestatoPresente: Coalesce(Boolean(x.Value.attestatoPresente); false);
+        noteLavoratore: Text(x.Value.noteLavoratore);
+        noteCoordinatore: Text(x.Value.noteCoordinatore);
+        noteHR: Text(x.Value.noteHR);
+        stato: Text(x.Value.stato);
+        dataInvio: DateTimeValue(x.Value.dataInvio);
+        dataApprovazioneCoord: DateTimeValue(x.Value.dataApprovazioneCoord);
+        dataValidazioneHR: DateTimeValue(x.Value.dataValidazioneHR);
+        meseCompetenza: Coalesce(Value(x.Value.meseCompetenza); 0);
+        annoCompetenza: Coalesce(Value(x.Value.annoCompetenza); 0);
+        periodoChiusura: Text(x.Value.periodoChiusura);
+        confermaPartecipazione: Coalesce(Boolean(x.Value.confermaPartecipazione); false);
+        confermaCorrettezza: Coalesce(Boolean(x.Value.confermaCorrettezza); false);
+        autorizzazioneInvio: Coalesce(Boolean(x.Value.autorizzazioneInvio); false);
+        possibileDuplicato: Coalesce(Boolean(x.Value.possibileDuplicato); false);
+        anomalie: Text(x.Value.anomalie);
+        giorniAttesa: Coalesce(Value(x.Value.giorniAttesa); 0);
+        segnalataHR: Coalesce(Boolean(x.Value.segnalataHR); false);
+        ultimaModificaDa: Text(x.Value.ultimaModificaDa);
+        creato: DateTimeValue(x.Value.creato);
+        modificato: DateTimeValue(x.Value.modificato);
+        colore: Coalesce(LookUp(tblStati; Stato = Text(x.Value.stato); Colore); colTestoSecondario);
+        gruppo: Coalesce(LookUp(tblStati; Stato = Text(x.Value.stato); Gruppo); "altro");
+        modificabile: Coalesce(LookUp(tblStati; Stato = Text(x.Value.stato); ModificabileLavoratore); false);
+        annullabile: Coalesce(LookUp(tblStati; Stato = Text(x.Value.stato); AnnullabileLavoratore); false)
+    }
+);;
+colLavoratoriTeam = ForAll(
+    Table(ParseJSON(Coalesce(varJsonTeam; jsonVuotoTeam)).lavoratori) As x;
+    {
+        id: Value(x.Value.id);
+        login: Lower(Text(x.Value.login));
+        nominativo: Text(x.Value.nominativo);
+        servizio: Text(x.Value.servizio);
+        centroDiCosto: Text(x.Value.centroDiCosto);
+        stato: Text(x.Value.stato)
+    }
+);;
+
+// ---------- Dettaglio di una richiesta (risposta di SDF_API10_DettaglioRichiesta in varJsonDettaglio) ----------
+recDettaglio = With(
+    {d: ParseJSON(Coalesce(varJsonDettaglio; jsonVuotoDettaglio))};
+    With(
+        {r: If(IsBlank(d.richiesta); ParseJSON("{}"); d.richiesta)};
+        {
+            id: Value(r.id);
+            idRichiesta: Text(r.idRichiesta);
+            lavoratoreLogin: Lower(Text(r.lavoratoreLogin));
+            lavoratoreId: Value(r.lavoratoreId);
+            cognome: Text(r.cognome);
+            nome: Text(r.nome);
+            nominativo: Trim(Text(r.cognome) & " " & Text(r.nome));
+            emailPersonale: Text(r.emailPersonale);
+            area: Text(r.area);
+            servizio: Text(r.servizio);
+            centroDiCosto: Text(r.centroDiCosto);
+            strutturaId: Value(r.strutturaId);
+            coordinatoreLogin: Lower(Text(r.coordinatoreLogin));
+            coordinatoreNome: Text(r.coordinatoreNome);
+            coordinatoreEmail: Text(r.coordinatoreEmail);
+            corsoId: Coalesce(Value(r.corsoId); 0);
+            codiceCorso: Text(r.codiceCorso);
+            titoloCorso: Text(r.titoloCorso);
+            titoloCorsoLibero: Text(r.titoloCorsoLibero);
+            titolo: Coalesce(Text(r.titoloCorso); Text(r.titoloCorsoLibero));
+            durataCorso: Coalesce(Value(r.durataCorso); 0);
+            enteErogatore: Text(r.enteErogatore);
+            modalita: Text(r.modalita);
+            piuGiornate: Coalesce(Boolean(r.piuGiornate); false);
+            dataSessione: DateValue(r.dataSessione);
+            oraInizioSessione: Text(r.oraInizioSessione);
+            oraFineSessione: Text(r.oraFineSessione);
+            durataSessione: Coalesce(Value(r.durataSessione); 0);
+            oraIngresso: Text(r.oraIngresso);
+            oraUscita: Text(r.oraUscita);
+            oreFrequentate: Coalesce(Value(r.oreFrequentate); 0);
+            oreRetribuiteRichieste: Coalesce(Value(r.oreRetribuiteRichieste); 0);
+            oreGettoneRichieste: Coalesce(Value(r.oreGettoneRichieste); 0);
+            oreRichiesteTotali: Coalesce(Value(r.oreRetribuiteRichieste); 0) + Coalesce(Value(r.oreGettoneRichieste); 0);
+            oreRetribuiteCoord: Coalesce(Value(r.oreRetribuiteCoord); 0);
+            oreGettoneCoord: Coalesce(Value(r.oreGettoneCoord); 0);
+            oreRetribuiteHR: Coalesce(Value(r.oreRetribuiteHR); 0);
+            oreGettoneHR: Coalesce(Value(r.oreGettoneHR); 0);
+            attestatoUrl: Text(r.attestatoUrl);
+            altraDocUrl: Text(r.altraDocUrl);
+            attestatoPresente: Coalesce(Boolean(r.attestatoPresente); false);
+            noteLavoratore: Text(r.noteLavoratore);
+            noteCoordinatore: Text(r.noteCoordinatore);
+            noteHR: Text(r.noteHR);
+            stato: Text(r.stato);
+            dataInvio: DateTimeValue(r.dataInvio);
+            dataApprovazioneCoord: DateTimeValue(r.dataApprovazioneCoord);
+            dataValidazioneHR: DateTimeValue(r.dataValidazioneHR);
+            meseCompetenza: Coalesce(Value(r.meseCompetenza); 0);
+            annoCompetenza: Coalesce(Value(r.annoCompetenza); 0);
+            periodoChiusura: Text(r.periodoChiusura);
+            confermaPartecipazione: Coalesce(Boolean(r.confermaPartecipazione); false);
+            confermaCorrettezza: Coalesce(Boolean(r.confermaCorrettezza); false);
+            autorizzazioneInvio: Coalesce(Boolean(r.autorizzazioneInvio); false);
+            possibileDuplicato: Coalesce(Boolean(r.possibileDuplicato); false);
+            anomalie: Text(r.anomalie);
+            giorniAttesa: Coalesce(Value(r.giorniAttesa); 0);
+            segnalataHR: Coalesce(Boolean(r.segnalataHR); false);
+            ultimaModificaDa: Text(r.ultimaModificaDa);
+            creato: DateTimeValue(r.creato);
+            modificato: DateTimeValue(r.modificato);
+            colore: Coalesce(LookUp(tblStati; Stato = Text(r.stato); Colore); colTestoSecondario);
+            gruppo: Coalesce(LookUp(tblStati; Stato = Text(r.stato); Gruppo); "altro");
+            modificabile: Coalesce(LookUp(tblStati; Stato = Text(r.stato); ModificabileLavoratore); false);
+            annullabile: Coalesce(LookUp(tblStati; Stato = Text(r.stato); AnnullabileLavoratore); false)
+        }
+    )
+);;
+recPermessi = With(
+    {d: ParseJSON(Coalesce(varJsonDettaglio; jsonVuotoDettaglio))};
+    With(
+        {pm: If(IsBlank(d.permessi); ParseJSON("{}"); d.permessi)};
+        {
+            modifica: Coalesce(Boolean(pm.modifica); false);
+            annulla: Coalesce(Boolean(pm.annulla); false);
+            esitoCoordinatore: Coalesce(Boolean(pm.esitoCoordinatore); false);
+            esitoHR: Coalesce(Boolean(pm.esitoHR); false);
+            ruoloChiamante: Lower(Text(d.ruoloChiamante));
+            meseChiuso: Coalesce(Boolean(d.meseChiuso); false)
+        }
+    )
+);;
+colStorico = ForAll(
+    Table(ParseJSON(Coalesce(varJsonDettaglio; jsonVuotoDettaglio)).storico) As s;
+    {
+        data: DateTimeValue(s.Value.data);
+        azione: Text(s.Value.azione);
+        campo: Text(s.Value.campo);
+        valorePrecedente: Text(s.Value.valorePrecedente);
+        valoreNuovo: Text(s.Value.valoreNuovo);
+        ruolo: Text(s.Value.ruolo);
+        autore: Text(s.Value.autore);
+        nota: Text(s.Value.nota)
+    }
+);;

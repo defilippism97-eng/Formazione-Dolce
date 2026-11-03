@@ -1,0 +1,1020 @@
+# =============================================================================
+#  Gestione ore formazione – Società Dolce · schermata scrProfilo
+#  0b – Il mio profilo (lavoratore; obbligatoria al primo accesso)
+# -----------------------------------------------------------------------------
+#  Formato: sorgente YAML di Power Apps Studio (Copia codice / Incolla codice).
+#  Come incollarla: vedere powerapps/README.md. Le formule sono in notazione
+#  inglese (separatore "," e concatenazione ";"): Studio in italiano le mostra
+#  con ";" e ";;" automaticamente.
+#  Dati: SDF_API04_AggiornaProfilo + SDF_API01_Profilo.
+# =============================================================================
+Screens:
+  scrProfilo:
+    Properties:
+      Fill: =colSfondo
+      OnVisible: |-
+        =Set(varMenuAperto, false);
+        UpdateContext({locModificaCF: !recProfilo.cfRegistrato, locEraIncompleto: !recProfilo.profiloCompleto, locDialogo: ""});
+        Reset(pro_txtEmail);
+        Reset(pro_txtCF);
+        Reset(pro_txtSegnalazione)
+    Children:
+      - pro_conRadice:
+          Control: GroupContainer@1.3.0
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutJustifyContent: =LayoutJustifyContent.Start
+            LayoutGap: =0
+            DropShadow: =DropShadow.None
+            Fill: =colSfondo
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+          Children:
+            - pro_conHeader:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.None
+                  Fill: =colPrimario
+                  Height: =56
+                  FillPortions: =0
+                  PaddingLeft: =12
+                  PaddingRight: =16
+                Children:
+                  - pro_icoMenu:
+                      Control: Classic/Icon@2.5.0
+                      Properties:
+                        Icon: =Icon.Hamburger
+                        OnSelect: =Set(varMenuAperto, !varMenuAperto)
+                        Color: =Color.White
+                        Tooltip: |-
+                          ="Apri o chiudi il menu"
+                        Width: =40
+                        Height: =40
+                        PaddingTop: =4
+                        PaddingBottom: =4
+                        PaddingLeft: =4
+                        PaddingRight: =4
+                        FillPortions: =0
+                        Visible: =isMobile
+                  - pro_lblTitoloApp:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Gestione ore formazione"
+                        Size: =16
+                        Color: =Color.White
+                        FontWeight: =FontWeight.Semibold
+                        FillPortions: =1
+                        Height: =40
+                        LayoutMinWidth: =150
+                  - pro_lblUtente:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =User().FullName & If(haRuolo, " · " & ruoloApp, "")
+                        Size: =11
+                        Color: =Color.White
+                        Align: =Align.Right
+                        Width: =340
+                        Height: =40
+                        FillPortions: =0
+                        Visible: =!isMobile
+            - pro_conCorpo:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =0
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(0, 0, 0, 0)
+                  FillPortions: =1
+                Children:
+                  - pro_conMenu:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =0
+                        DropShadow: =DropShadow.None
+                        Fill: =colSuperficie
+                        Width: =If(isMobile, Parent.Width, 230)
+                        FillPortions: =0
+                        Visible: =!isMobile || varMenuAperto
+                        BorderColor: =colBordo
+                        BorderThickness: =1
+                        PaddingTop: =8
+                      Children:
+                        - pro_lblMenuUtente:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: =User().FullName & Char(10) & ruoloApp
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Visible: =isMobile
+                              Height: =48
+                              FillPortions: =0
+                              PaddingLeft: =12
+                              Wrap: =true
+                        - pro_galMenu:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =tblMenu
+                              TemplateSize: =48
+                              TemplatePadding: =0
+                              ShowScrollbar: =false
+                              BorderColor: =colBordo
+                              BorderThickness: =0
+                              Fill: =RGBA(0, 0, 0, 0)
+                              TemplateFill: =If(ThisItem.Chiave = "profilo", colPrimarioChiaro, RGBA(0, 0, 0, 0))
+                              OnSelect: |-
+                                =Set(varMenuAperto, false);
+                                Switch(
+                                    ThisItem.Chiave,
+                                    "home", Navigate(scrHome, ScreenTransition.None),
+                                    "mie", Navigate(scrMieRichieste, ScreenTransition.None),
+                                    "nuova", Set(varIdModifica, 0); Navigate(scrRichiesta, ScreenTransition.None),
+                                    "team", Navigate(scrTeam, ScreenTransition.None),
+                                    "validazione", Navigate(scrValidazioneHR, ScreenTransition.None),
+                                    "riepilogo", Navigate(scrRiepilogo, ScreenTransition.None),
+                                    "chiusura", Navigate(scrChiusura, ScreenTransition.None),
+                                    "admin", Navigate(scrAdmin, ScreenTransition.None),
+                                    "profilo", Navigate(scrProfilo, ScreenTransition.None)
+                                )
+                              DisplayMode: =If(isLavoratore && !recProfilo.profiloCompleto, DisplayMode.Disabled, DisplayMode.Edit)
+                              FillPortions: =1
+                            Children:
+                              - pro_icoVoceMenu:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =ThisItem.Icona
+                                    OnSelect: =Select(Parent)
+                                    Color: =If(ThisItem.Chiave = "profilo", colPrimario, colTestoSecondario)
+                                    Tooltip: |-
+                                      =""
+                                    Width: =28
+                                    Height: =28
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =12
+                                    Y: =(Parent.TemplateHeight - Self.Height) / 2
+                              - pro_lblVoceMenu:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Voce
+                                    Size: =12
+                                    Color: =If(ThisItem.Chiave = "profilo", colPrimario, colTesto)
+                                    FontWeight: =If(ThisItem.Chiave = "profilo", FontWeight.Semibold, FontWeight.Normal)
+                                    X: =48
+                                    Y: =0
+                                    Width: =Parent.TemplateWidth - 56
+                                    Height: =Parent.TemplateHeight
+                                    OnSelect: =Select(Parent)
+                              - pro_rctVoceAttiva:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colPrimario
+                                    Height: =Parent.TemplateHeight
+                                    X: =0
+                                    Y: =0
+                                    Width: =4
+                                    Visible: =ThisItem.Chiave = "profilo"
+                        - pro_lblMenuBloccato:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Completa il profilo per usare le altre funzioni."
+                              Size: =11
+                              Color: =colAvviso
+                              Visible: =isLavoratore && !recProfilo.profiloCompleto
+                              Height: =60
+                              FillPortions: =0
+                              PaddingLeft: =12
+                              Wrap: =true
+                  - pro_conContenuto:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =12
+                        DropShadow: =DropShadow.None
+                        Fill: =colSfondo
+                        FillPortions: =1
+                        Visible: =!isMobile || !varMenuAperto
+                        PaddingTop: =16
+                        PaddingBottom: =16
+                        PaddingLeft: =If(isMobile, 12, 24)
+                        PaddingRight: =If(isMobile, 12, 24)
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                      Children:
+                        - pro_lblTitolo:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Il mio profilo"
+                              Size: =18
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =36
+                              FillPortions: =0
+                        - pro_lblAvvisoPrimo:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Primo accesso: per usare l’app inserisci la tua e-mail personale e il codice fiscale, poi premi Salva."
+                              Size: =12
+                              Color: =Color.White
+                              FontWeight: =FontWeight.Semibold
+                              Fill: =colAvviso
+                              PaddingLeft: =12
+                              PaddingRight: =12
+                              Height: =48
+                              Wrap: =true
+                              FillPortions: =0
+                              Visible: =!recProfilo.profiloCompleto
+                        - pro_lblInfoNotifiche:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Le notifiche dell’app (invio, esiti, richieste di integrazione) arrivano all’e-mail personale indicata qui: non serve una casella aziendale. Il codice fiscale serve all’Ufficio Paghe ed è visibile solo all’Ufficio HR."
+                              Size: =12
+                              Color: =colTestoSecondario
+                              AutoHeight: =true
+                              Wrap: =true
+                              FillPortions: =0
+                              Height: =20
+                        - pro_conDatiPersonali:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + pro_lblSezPersonali.Height + 8 + pro_rigaAnagrafica.Height + 8 + pro_rigaContatti.Height + 8 + If(pro_lblErrori.Visible, pro_lblErrori.Height + 8, 0) + pro_conSalva.Height + 8
+                            Children:
+                              - pro_lblSezPersonali:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Dati personali"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - pro_rigaAnagrafica:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76, 64)
+                                  Children:
+                                    - pro_conCampoNominativo:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - pro_lblCampoNominativo:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Nome e cognome (da Microsoft 365)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - pro_lblNominativo:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(Trim(recProfilo.nome & " " & recProfilo.cognome), User().FullName)
+                                                Size: =13
+                                                Color: =colTesto
+                                                FontWeight: =FontWeight.Semibold
+                                                FillPortions: =0
+                                                Height: =36
+                                    - pro_conCampoLogin:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - pro_lblCampoLogin:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Account Microsoft 365"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - pro_lblLogin:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =recProfilo.login
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                              - pro_rigaContatti:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + If(pro_conCampoCFMascherato.Visible, 76, 0) + If(pro_conCampoCF.Visible, 76, 0), 64)
+                                  Children:
+                                    - pro_conCampoEmail:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - pro_lblCampoEmail:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="E-mail personale (obbligatoria)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - pro_txtEmail:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: =recProfilo.emailPersonale
+                                                HintText: |-
+                                                  ="nome.cognome@esempio.it"
+                                                Size: =12
+                                                BorderColor: =If(IsBlank(pro_txtEmail.Text) || IsMatch(Trim(pro_txtEmail.Text), Match.Email), colBordo, colErrore)
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                    - pro_conCampoCFMascherato:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                          Visible: =!locModificaCF
+                                        Children:
+                                          - pro_lblCampoCFMascherato:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Codice fiscale"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - pro_conCFRegistrato:
+                                              Control: GroupContainer@1.3.0
+                                              Variant: AutoLayout
+                                              Properties:
+                                                LayoutDirection: =LayoutDirection.Horizontal
+                                                LayoutAlignItems: =LayoutAlignItems.Center
+                                                LayoutJustifyContent: =LayoutJustifyContent.Start
+                                                LayoutGap: =8
+                                                DropShadow: =DropShadow.None
+                                                Fill: =RGBA(0, 0, 0, 0)
+                                                Height: =36
+                                                FillPortions: =0
+                                              Children:
+                                                - pro_lblCFMascherato:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      Text: =recProfilo.cfMascherato & "  ✓ registrato"
+                                                      Size: =12
+                                                      Color: =colTesto
+                                                      FillPortions: =1
+                                                      Height: =36
+                                                - pro_btnModificaCF:
+                                                    Control: Classic/Button@2.2.0
+                                                    Properties:
+                                                      Text: |-
+                                                        ="Modifica"
+                                                      OnSelect: |-
+                                                        =UpdateContext({locModificaCF: true})
+                                                      Size: =12
+                                                      FontWeight: =FontWeight.Semibold
+                                                      Height: =36
+                                                      Width: =110
+                                                      FillPortions: =0
+                                                      RadiusTopLeft: =6
+                                                      RadiusTopRight: =6
+                                                      RadiusBottomLeft: =6
+                                                      RadiusBottomRight: =6
+                                                      DisabledFill: =RGBA(200, 200, 200, 1)
+                                                      DisabledColor: =RGBA(110, 110, 110, 1)
+                                                      Fill: =Color.White
+                                                      Color: =colPrimario
+                                                      HoverFill: =colPrimarioChiaro
+                                                      PressedFill: =colPrimarioChiaro
+                                                      HoverColor: =colPrimario
+                                                      BorderColor: =colPrimario
+                                                      BorderThickness: =1
+                                    - pro_conCampoCF:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                          Visible: =locModificaCF
+                                        Children:
+                                          - pro_lblCampoCF:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Codice fiscale (16 caratteri)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - pro_txtCF:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: |-
+                                                  =""
+                                                HintText: |-
+                                                  ="RSSMRA80A01A944X"
+                                                Size: =12
+                                                BorderColor: =If(IsBlank(pro_txtCF.Text) || IsMatch(Upper(Trim(pro_txtCF.Text)), "^[A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z]$"), colBordo, colErrore)
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                MaxLength: =16
+                              - pro_lblErrori:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Concat(
+                                          Filter(
+                                              Table(
+                                                  {Errore: !IsBlank(pro_txtEmail.Text) && !IsMatch(Trim(pro_txtEmail.Text), Match.Email), Testo: "L’e-mail personale non è valida."},
+                                                  {Errore: locModificaCF && !IsBlank(pro_txtCF.Text) && !IsMatch(Upper(Trim(pro_txtCF.Text)), "^[A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z]$"), Testo: "Il codice fiscale non è valido (16 caratteri: 6 lettere, 2 numeri, 1 lettera, 2 numeri, 1 lettera, 3 numeri, 1 lettera)."}
+                                              ),
+                                              Errore
+                                          ),
+                                          "• " & Testo,
+                                          Char(10)
+                                      )
+                                    Size: =11
+                                    Color: =colErrore
+                                    AutoHeight: =true
+                                    Wrap: =true
+                                    Height: =20
+                                    FillPortions: =0
+                                    Visible: =!IsBlank(Self.Text)
+                              - pro_conSalva:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Horizontal
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =8
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    Height: =44
+                                    FillPortions: =0
+                                  Children:
+                                    - pro_btnSalva:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Salva profilo"
+                                          OnSelect: |-
+                                            =If(
+                                                !IsMatch(Trim(pro_txtEmail.Text), Match.Email),
+                                                Notify("Inserisci un indirizzo e-mail personale valido (es. nome.cognome@gmail.com).", NotificationType.Error),
+                                                !(!locModificaCF || IsMatch(Upper(Trim(pro_txtCF.Text)), "^[A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z]$")),
+                                                Notify("Il codice fiscale non è valido: controlla i 16 caratteri.", NotificationType.Error),
+                                                Set(varCaricamento, true);
+                                                Set(varMessaggioCaricamento, "Salvataggio del profilo…");
+                                                With(
+                                                    {r: IfError(
+                                                        SDF_API04_AggiornaProfilo.Run(Trim(pro_txtEmail.Text), If(locModificaCF, Upper(Trim(pro_txtCF.Text)), ""), ""),
+                                                        {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                                                    )},
+                                                    If(
+                                                        r.esito = "OK",
+                                                        // ricarica il profilo (SDF_API01_Profilo) per avere dati aggiornati e CF mascherato
+                                                        With(
+                                                            {rp: IfError(SDF_API01_Profilo.Run(), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                                            If(
+                                                                rp.esito = "OK",
+                                                                Set(varJsonProfilo, rp.dati);
+                                                                Set(varErroreProfilo, "");
+                                                                Set(varProfiloCaricato, true),
+                                                                Set(varErroreProfilo, Coalesce(rp.messaggio, testoErroreRete))
+                                                            )
+                                                        );
+                                                        Notify("Profilo salvato. Le notifiche arriveranno a " & recProfilo.emailPersonale & ".", NotificationType.Success);
+                                                        UpdateContext({locModificaCF: !recProfilo.cfRegistrato});
+                                                        Reset(pro_txtCF);
+                                                        If(
+                                                            locEraIncompleto && recProfilo.profiloCompleto,
+                                                            UpdateContext({locEraIncompleto: false});
+                                                            If(
+                                                                !IsBlank(Param("richiesta")) && !varParamGestito,
+                                                                Set(varParamGestito, true);
+                                                                Set(varDaLinkDiretto, true);
+                                                                Set(varIdDettaglio, Value(Param("richiesta")));
+                                                                Navigate(scrDettaglio, ScreenTransition.None),
+                                                                Navigate(scrHome, ScreenTransition.None)
+                                                            )
+                                                        ),
+                                                        Notify(r.messaggio, NotificationType.Error)
+                                                    )
+                                                );
+                                                Set(varCaricamento, false)
+                                            )
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =180
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colPrimario
+                                          Color: =Color.White
+                                          HoverFill: =colPrimarioScuro
+                                          PressedFill: =colPrimarioScuro
+                                          BorderThickness: =0
+                                          DisplayMode: =If(IsMatch(Trim(pro_txtEmail.Text), Match.Email) && (!locModificaCF || IsMatch(Upper(Trim(pro_txtCF.Text)), "^[A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z]$")) && !(locModificaCF && IsBlank(pro_txtCF.Text)), DisplayMode.Edit, DisplayMode.Disabled)
+                                    - pro_btnAnnullaCF:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Annulla modifica CF"
+                                          OnSelect: |-
+                                            =UpdateContext({locModificaCF: false}); Reset(pro_txtCF)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =200
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =Color.White
+                                          Color: =colPrimario
+                                          HoverFill: =colPrimarioChiaro
+                                          PressedFill: =colPrimarioChiaro
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =1
+                                          Visible: =locModificaCF && recProfilo.cfRegistrato
+                        - pro_conDatiOrg:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + pro_lblSezOrg.Height + 8 + pro_lblInfoOrg.Height + 8 + pro_rigaOrg1.Height + 8 + pro_rigaOrg2.Height + 8
+                            Children:
+                              - pro_lblSezOrg:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Dati organizzativi (sola lettura)"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - pro_lblInfoOrg:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Questi dati arrivano dall’organigramma e non si possono modificare qui. Se non sono corretti, segnala la variazione all’Ufficio HR."
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    AutoHeight: =true
+                                    Wrap: =true
+                                    FillPortions: =0
+                                    Height: =20
+                              - pro_rigaOrg1:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76, 64)
+                                  Children:
+                                    - pro_conCampoArea:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - pro_lblCampoArea:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Area"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - pro_lblArea:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(recProfilo.area, "—")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                                    - pro_conCampoServizio:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - pro_lblCampoServizio:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Servizio"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - pro_lblServizio:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(recProfilo.servizio, "—")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                              - pro_rigaOrg2:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76, 64)
+                                  Children:
+                                    - pro_conCampoCdc:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - pro_lblCampoCdc:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Centro di costo"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - pro_lblCdc:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(recProfilo.centroDiCosto, "—")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                                    - pro_conCampoCoordinatore:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - pro_lblCampoCoordinatore:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Coordinatore"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - pro_lblCoordinatore:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: =Coalesce(recProfilo.coordinatoreNome, "Nessun coordinatore assegnato")
+                                                Size: =12
+                                                Color: =colTesto
+                                                FillPortions: =0
+                                                Height: =36
+                        - pro_conSegnalazione:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + pro_lblSezSegnalazione.Height + 8 + If(pro_lblSegnalazioneAperta.Visible, pro_lblSegnalazioneAperta.Height + 8, 0) + pro_txtSegnalazione.Height + 8 + pro_conSegnala.Height + 8
+                            Children:
+                              - pro_lblSezSegnalazione:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Segnala una variazione a HR"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - pro_lblSegnalazioneAperta:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Hai già una segnalazione aperta: l’Ufficio HR la sta gestendo. Puoi aggiungere altre informazioni."
+                                    Size: =11
+                                    Color: =colAvviso
+                                    Height: =36
+                                    Wrap: =true
+                                    FillPortions: =0
+                                    Visible: =recProfilo.segnalazioneAperta
+                              - pro_txtSegnalazione:
+                                  Control: Classic/TextInput@2.3.2
+                                  Properties:
+                                    Default: |-
+                                      =""
+                                    HintText: |-
+                                      ="Es. da novembre lavoro al servizio Nido Girasole con la coordinatrice Anna Bianchi"
+                                    Size: =12
+                                    BorderColor: =colBordo
+                                    Height: =80
+                                    FillPortions: =0
+                                    RadiusTopLeft: =4
+                                    RadiusTopRight: =4
+                                    RadiusBottomLeft: =4
+                                    RadiusBottomRight: =4
+                                    Mode: =TextMode.MultiLine
+                              - pro_conSegnala:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Horizontal
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =8
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    Height: =44
+                                    FillPortions: =0
+                                  Children:
+                                    - pro_btnSegnala:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Segnala variazione a HR"
+                                          OnSelect: |-
+                                            =If(
+                                                IsBlank(Trim(pro_txtSegnalazione.Text)),
+                                                Notify("Descrivi la variazione da segnalare (es. nuovo servizio, nuovo coordinatore, centro di costo errato).", NotificationType.Error),
+                                                Set(varCaricamento, true);
+                                                Set(varMessaggioCaricamento, "Invio della segnalazione…");
+                                                With(
+                                                    {r: IfError(
+                                                        SDF_API04_AggiornaProfilo.Run(recProfilo.emailPersonale, "", Trim(pro_txtSegnalazione.Text)),
+                                                        {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                                                    )},
+                                                    If(
+                                                        r.esito = "OK",
+                                                        With(
+                                                            {rp: IfError(SDF_API01_Profilo.Run(), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                                            If(
+                                                                rp.esito = "OK",
+                                                                Set(varJsonProfilo, rp.dati);
+                                                                Set(varErroreProfilo, "");
+                                                                Set(varProfiloCaricato, true),
+                                                                Set(varErroreProfilo, Coalesce(rp.messaggio, testoErroreRete))
+                                                            )
+                                                        );
+                                                        Reset(pro_txtSegnalazione);
+                                                        Notify("Segnalazione inviata all’Ufficio HR/Formazione: riceverai una risposta all’e-mail personale.", NotificationType.Success),
+                                                        Notify(r.messaggio, NotificationType.Error)
+                                                    )
+                                                );
+                                                Set(varCaricamento, false)
+                                            )
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =240
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =Color.White
+                                          Color: =colPrimario
+                                          HoverFill: =colPrimarioChiaro
+                                          PressedFill: =colPrimarioChiaro
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =1
+                                          DisplayMode: =If(IsBlank(Trim(pro_txtSegnalazione.Text)), DisplayMode.Disabled, DisplayMode.Edit)
+      - pro_conCaricamento:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =varCaricamento
+          Children:
+            - pro_rctCaricamento:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =RGBA(255, 255, 255, 0.65)
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - pro_lblCaricamento:
+                Control: Label@2.5.1
+                Properties:
+                  Text: =Coalesce(varMessaggioCaricamento, "Caricamento in corso…") & Char(10) & "Attendere qualche secondo."
+                  Size: =14
+                  Color: =colPrimario
+                  FontWeight: =FontWeight.Semibold
+                  Align: =Align.Center
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(360, Parent.Width - 32)
+                  Height: =96
+                  Wrap: =true
+                  BorderColor: =colBordo
+                  BorderThickness: =1

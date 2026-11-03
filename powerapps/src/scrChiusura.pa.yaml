@@ -1,0 +1,2105 @@
+# =============================================================================
+#  Gestione ore formazione – Società Dolce · schermata scrChiusura
+#  8 – Chiusura mensile e file paghe (HR; riapertura solo Amministratore)
+# -----------------------------------------------------------------------------
+#  Formato: sorgente YAML di Power Apps Studio (Copia codice / Incolla codice).
+#  Come incollarla: vedere powerapps/README.md. Le formule sono in notazione
+#  inglese (separatore "," e concatenazione ";"): Studio in italiano le mostra
+#  con ";" e ";;" automaticamente.
+#  Dati: letture dirette (HR); SDF_API08_ChiusuraMensile e SDF_API09_FilePaghe; Patch su Lavoratori (segnalazioni, CF).
+# =============================================================================
+Screens:
+  scrChiusura:
+    Properties:
+      Fill: =colSfondo
+      OnVisible: |-
+        =Set(varMenuAperto, false);
+        UpdateContext({locDialogo: ""});
+        Set(varCaricamento, true);
+        Set(varMessaggioCaricamento, "Verifica del mese in corso…");
+        UpdateContext({locPeriodo: Text(chi_ddAnno.Selected.Num) & "-" & Text(chi_ddMese.Selected.Num, "00"), locUrlFile: ""});
+        Refresh('Chiusure mensili');
+        UpdateContext({locChiusura: LookUp('Chiusure mensili', Periodo = locPeriodo)});
+        // richieste ancora aperte nel mese (stati precedenti alla validazione HR) – filtro delegabile
+        ClearCollect(
+            colChiAperte,
+            ShowColumns(
+                Filter(
+                    'Richieste formazione',
+                    'Anno di competenza' = chi_ddAnno.Selected.Num,
+                    'Mese di competenza' = chi_ddMese.Selected.Num,
+                    'Stato richiesta'.Value = "Bozza" ||
+                    'Stato richiesta'.Value = "Inviata al coordinatore" ||
+                    'Stato richiesta'.Value = "In attesa del coordinatore" ||
+                    'Stato richiesta'.Value = "Integrazione richiesta dal coordinatore" ||
+                    'Stato richiesta'.Value = "Approvata dal coordinatore" ||
+                    'Stato richiesta'.Value = "In attesa di validazione HR" ||
+                    'Stato richiesta'.Value = "Integrazione richiesta da HR"
+                ),
+                ID, 'ID richiesta', Cognome, Nome, Coordinatore, 'Stato richiesta', 'Data sessione formativa'
+            )
+        );
+        // richieste approvate o validate del mese: base per anomalie e controllo del codice fiscale
+        ClearCollect(
+            colChiDaVerificare,
+            ShowColumns(
+                Filter(
+                    'Richieste formazione',
+                    'Anno di competenza' = chi_ddAnno.Selected.Num,
+                    'Mese di competenza' = chi_ddMese.Selected.Num,
+                    'Stato richiesta'.Value = "Approvata dal coordinatore" ||
+                    'Stato richiesta'.Value = "In attesa di validazione HR" ||
+                    'Stato richiesta'.Value = "Validata da HR" ||
+                    'Stato richiesta'.Value = "Inclusa nel riepilogo mensile" ||
+                    'Stato richiesta'.Value = "Inviata a Payroll"
+                ),
+                ID, 'ID richiesta', Cognome, Nome, 'Login lavoratore', Coordinatore, 'Stato richiesta', 'Possibile duplicato',
+                'Attestato presente', 'Anomalie rilevate', 'Titolo del corso a catalogo', 'Titolo corso libero', 'Data sessione formativa'
+            )
+        );
+        // anomalie: possibili duplicati, attestato mancante, anomalie segnalate dai flussi (colonna multilinea: filtro locale)
+        ClearCollect(
+            colChiAnomalie,
+            Filter(colChiDaVerificare, 'Possibile duplicato' || !'Attestato presente' || !IsBlank('Anomalie rilevate'))
+        );
+        // lavoratori con una segnalazione di variazione da gestire
+        ClearCollect(colChiSegnalazioni, Filter(Lavoratori, 'Segnalazione da gestire' = true));
+        // lavoratori delle richieste validate del mese senza codice fiscale
+        ClearCollect(colChiLavSenzaCF, Filter(Lavoratori, 'Codice fiscale registrato' = false));
+        ClearCollect(
+            colChiSenzaCF,
+            Filter(
+                colChiLavSenzaCF,
+                'Login Microsoft 365' in Filter(
+                    colChiDaVerificare,
+                    'Stato richiesta'.Value = "Validata da HR" || 'Stato richiesta'.Value = "Inclusa nel riepilogo mensile" || 'Stato richiesta'.Value = "Inviata a Payroll"
+                ).'Login lavoratore'
+            )
+        );
+        Set(varCaricamento, false)
+    Children:
+      - chi_conRadice:
+          Control: GroupContainer@1.3.0
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutJustifyContent: =LayoutJustifyContent.Start
+            LayoutGap: =0
+            DropShadow: =DropShadow.None
+            Fill: =colSfondo
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+          Children:
+            - chi_conHeader:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.None
+                  Fill: =colPrimario
+                  Height: =56
+                  FillPortions: =0
+                  PaddingLeft: =12
+                  PaddingRight: =16
+                Children:
+                  - chi_icoMenu:
+                      Control: Classic/Icon@2.5.0
+                      Properties:
+                        Icon: =Icon.Hamburger
+                        OnSelect: =Set(varMenuAperto, !varMenuAperto)
+                        Color: =Color.White
+                        Tooltip: |-
+                          ="Apri o chiudi il menu"
+                        Width: =40
+                        Height: =40
+                        PaddingTop: =4
+                        PaddingBottom: =4
+                        PaddingLeft: =4
+                        PaddingRight: =4
+                        FillPortions: =0
+                        Visible: =isMobile
+                  - chi_lblTitoloApp:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Gestione ore formazione"
+                        Size: =16
+                        Color: =Color.White
+                        FontWeight: =FontWeight.Semibold
+                        FillPortions: =1
+                        Height: =40
+                        LayoutMinWidth: =150
+                  - chi_lblUtente:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =User().FullName & If(haRuolo, " · " & ruoloApp, "")
+                        Size: =11
+                        Color: =Color.White
+                        Align: =Align.Right
+                        Width: =340
+                        Height: =40
+                        FillPortions: =0
+                        Visible: =!isMobile
+            - chi_conCorpo:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =0
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(0, 0, 0, 0)
+                  FillPortions: =1
+                Children:
+                  - chi_conMenu:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =0
+                        DropShadow: =DropShadow.None
+                        Fill: =colSuperficie
+                        Width: =If(isMobile, Parent.Width, 230)
+                        FillPortions: =0
+                        Visible: =!isMobile || varMenuAperto
+                        BorderColor: =colBordo
+                        BorderThickness: =1
+                        PaddingTop: =8
+                      Children:
+                        - chi_lblMenuUtente:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: =User().FullName & Char(10) & ruoloApp
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Visible: =isMobile
+                              Height: =48
+                              FillPortions: =0
+                              PaddingLeft: =12
+                              Wrap: =true
+                        - chi_galMenu:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =tblMenu
+                              TemplateSize: =48
+                              TemplatePadding: =0
+                              ShowScrollbar: =false
+                              BorderColor: =colBordo
+                              BorderThickness: =0
+                              Fill: =RGBA(0, 0, 0, 0)
+                              TemplateFill: =If(ThisItem.Chiave = "chiusura", colPrimarioChiaro, RGBA(0, 0, 0, 0))
+                              OnSelect: |-
+                                =Set(varMenuAperto, false);
+                                Switch(
+                                    ThisItem.Chiave,
+                                    "home", Navigate(scrHome, ScreenTransition.None),
+                                    "mie", Navigate(scrMieRichieste, ScreenTransition.None),
+                                    "nuova", Set(varIdModifica, 0); Navigate(scrRichiesta, ScreenTransition.None),
+                                    "team", Navigate(scrTeam, ScreenTransition.None),
+                                    "validazione", Navigate(scrValidazioneHR, ScreenTransition.None),
+                                    "riepilogo", Navigate(scrRiepilogo, ScreenTransition.None),
+                                    "chiusura", Navigate(scrChiusura, ScreenTransition.None),
+                                    "admin", Navigate(scrAdmin, ScreenTransition.None),
+                                    "profilo", Navigate(scrProfilo, ScreenTransition.None)
+                                )
+                              DisplayMode: =If(false, DisplayMode.Disabled, DisplayMode.Edit)
+                              FillPortions: =1
+                            Children:
+                              - chi_icoVoceMenu:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =ThisItem.Icona
+                                    OnSelect: =Select(Parent)
+                                    Color: =If(ThisItem.Chiave = "chiusura", colPrimario, colTestoSecondario)
+                                    Tooltip: |-
+                                      =""
+                                    Width: =28
+                                    Height: =28
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =12
+                                    Y: =(Parent.TemplateHeight - Self.Height) / 2
+                              - chi_lblVoceMenu:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Voce
+                                    Size: =12
+                                    Color: =If(ThisItem.Chiave = "chiusura", colPrimario, colTesto)
+                                    FontWeight: =If(ThisItem.Chiave = "chiusura", FontWeight.Semibold, FontWeight.Normal)
+                                    X: =48
+                                    Y: =0
+                                    Width: =Parent.TemplateWidth - 56
+                                    Height: =Parent.TemplateHeight
+                                    OnSelect: =Select(Parent)
+                              - chi_rctVoceAttiva:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colPrimario
+                                    Height: =Parent.TemplateHeight
+                                    X: =0
+                                    Y: =0
+                                    Width: =4
+                                    Visible: =ThisItem.Chiave = "chiusura"
+                  - chi_conContenuto:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =12
+                        DropShadow: =DropShadow.None
+                        Fill: =colSfondo
+                        FillPortions: =1
+                        Visible: =!isMobile || !varMenuAperto
+                        PaddingTop: =16
+                        PaddingBottom: =16
+                        PaddingLeft: =If(isMobile, 12, 24)
+                        PaddingRight: =If(isMobile, 12, 24)
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                      Children:
+                        - chi_lblTitolo:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Chiusura mensile e file paghe"
+                              Size: =18
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =36
+                              FillPortions: =0
+                        - chi_lblInfo:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="1) Scegli il mese e verifica richieste aperte e anomalie. 2) Chiudi il mese: le richieste validate vengono incluse nel riepilogo e il mese non è più modificabile. 3) Genera il file paghe (CSV con separatore ;). Solo l’Amministratore può riaprire un mese chiuso."
+                              Size: =11
+                              Color: =colTestoSecondario
+                              AutoHeight: =true
+                              Wrap: =true
+                              FillPortions: =0
+                              Height: =20
+                        - chi_rigaPeriodo:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              FillPortions: =0
+                              Height: =If(isMobile, 76 + 76 + 76, 64)
+                            Children:
+                              - chi_conCampoAnno:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - chi_lblCampoAnno:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Anno"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - chi_ddAnno:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =tblAnni
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: =Text(Year(DateAdd(Today(), -1, TimeUnit.Months)))
+                                          OnChange: =Select(chi_btnVerifica)
+                              - chi_conCampoMese:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - chi_lblCampoMese:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Mese"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - chi_ddMese:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =tblMesi
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: =LookUp(tblMesi, Num = Month(DateAdd(Today(), -1, TimeUnit.Months))).Value
+                                          OnChange: =Select(chi_btnVerifica)
+                              - chi_conCampoVerifica:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - chi_lblCampoVerifica:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            =" "
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - chi_btnVerifica:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Verifica il mese"
+                                          OnSelect: |-
+                                            =Set(varCaricamento, true);
+                                            Set(varMessaggioCaricamento, "Verifica del mese in corso…");
+                                            UpdateContext({locPeriodo: Text(chi_ddAnno.Selected.Num) & "-" & Text(chi_ddMese.Selected.Num, "00"), locUrlFile: ""});
+                                            Refresh('Chiusure mensili');
+                                            UpdateContext({locChiusura: LookUp('Chiusure mensili', Periodo = locPeriodo)});
+                                            // richieste ancora aperte nel mese (stati precedenti alla validazione HR) – filtro delegabile
+                                            ClearCollect(
+                                                colChiAperte,
+                                                ShowColumns(
+                                                    Filter(
+                                                        'Richieste formazione',
+                                                        'Anno di competenza' = chi_ddAnno.Selected.Num,
+                                                        'Mese di competenza' = chi_ddMese.Selected.Num,
+                                                        'Stato richiesta'.Value = "Bozza" ||
+                                                        'Stato richiesta'.Value = "Inviata al coordinatore" ||
+                                                        'Stato richiesta'.Value = "In attesa del coordinatore" ||
+                                                        'Stato richiesta'.Value = "Integrazione richiesta dal coordinatore" ||
+                                                        'Stato richiesta'.Value = "Approvata dal coordinatore" ||
+                                                        'Stato richiesta'.Value = "In attesa di validazione HR" ||
+                                                        'Stato richiesta'.Value = "Integrazione richiesta da HR"
+                                                    ),
+                                                    ID, 'ID richiesta', Cognome, Nome, Coordinatore, 'Stato richiesta', 'Data sessione formativa'
+                                                )
+                                            );
+                                            // richieste approvate o validate del mese: base per anomalie e controllo del codice fiscale
+                                            ClearCollect(
+                                                colChiDaVerificare,
+                                                ShowColumns(
+                                                    Filter(
+                                                        'Richieste formazione',
+                                                        'Anno di competenza' = chi_ddAnno.Selected.Num,
+                                                        'Mese di competenza' = chi_ddMese.Selected.Num,
+                                                        'Stato richiesta'.Value = "Approvata dal coordinatore" ||
+                                                        'Stato richiesta'.Value = "In attesa di validazione HR" ||
+                                                        'Stato richiesta'.Value = "Validata da HR" ||
+                                                        'Stato richiesta'.Value = "Inclusa nel riepilogo mensile" ||
+                                                        'Stato richiesta'.Value = "Inviata a Payroll"
+                                                    ),
+                                                    ID, 'ID richiesta', Cognome, Nome, 'Login lavoratore', Coordinatore, 'Stato richiesta', 'Possibile duplicato',
+                                                    'Attestato presente', 'Anomalie rilevate', 'Titolo del corso a catalogo', 'Titolo corso libero', 'Data sessione formativa'
+                                                )
+                                            );
+                                            // anomalie: possibili duplicati, attestato mancante, anomalie segnalate dai flussi (colonna multilinea: filtro locale)
+                                            ClearCollect(
+                                                colChiAnomalie,
+                                                Filter(colChiDaVerificare, 'Possibile duplicato' || !'Attestato presente' || !IsBlank('Anomalie rilevate'))
+                                            );
+                                            // lavoratori con una segnalazione di variazione da gestire
+                                            ClearCollect(colChiSegnalazioni, Filter(Lavoratori, 'Segnalazione da gestire' = true));
+                                            // lavoratori delle richieste validate del mese senza codice fiscale
+                                            ClearCollect(colChiLavSenzaCF, Filter(Lavoratori, 'Codice fiscale registrato' = false));
+                                            ClearCollect(
+                                                colChiSenzaCF,
+                                                Filter(
+                                                    colChiLavSenzaCF,
+                                                    'Login Microsoft 365' in Filter(
+                                                        colChiDaVerificare,
+                                                        'Stato richiesta'.Value = "Validata da HR" || 'Stato richiesta'.Value = "Inclusa nel riepilogo mensile" || 'Stato richiesta'.Value = "Inviata a Payroll"
+                                                    ).'Login lavoratore'
+                                                )
+                                            );
+                                            Set(varCaricamento, false)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =200
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =Color.White
+                                          Color: =colPrimario
+                                          HoverFill: =colPrimarioChiaro
+                                          PressedFill: =colPrimarioChiaro
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =1
+                        - chi_lblStato:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Periodo " & locPeriodo & ": " & Coalesce(locChiusura.'Stato del periodo'.Value, "Aperto (nessuna chiusura registrata)") &
+                                If(!IsBlank(locChiusura.'Data chiusura'), " · chiuso il " & Text(locChiusura.'Data chiusura', "dd/mm/yyyy hh:mm") & " da " & locChiusura.'Utente chiusura', "") &
+                                If(!IsBlank(locChiusura.'Numero richieste incluse'), " · richieste incluse: " & locChiusura.'Numero richieste incluse' & " · ore riconosciute: " & Text(locChiusura.'Totale ore riconosciute', "[$-en-US]#,##0.##") & " · gettoni: " & Text(locChiusura.'Totale gettoni', "[$-en-US]#,##0.##"), "") &
+                                If(locChiusura.'File paghe generato', " · file paghe generato (versione " & locChiusura.'Versione file paghe' & ")", "") &
+                                If(locChiusura.'Stato del periodo'.Value = "Riaperto", " · riaperto il " & Text(locChiusura.'Data riapertura', "dd/mm/yyyy") & " da " & locChiusura.'Utente riapertura' & ": " & locChiusura.'Motivo riapertura', "")
+                              Size: =13
+                              Color: =Switch(locChiusura.'Stato del periodo'.Value, "Chiuso", colSuccesso, "Riaperto", colAvviso, colPrimario)
+                              FontWeight: =FontWeight.Semibold
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingLeft: =12
+                              PaddingTop: =8
+                              PaddingBottom: =8
+                              AutoHeight: =true
+                              Wrap: =true
+                              Height: =40
+                              FillPortions: =0
+                        - chi_conKpi:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              LayoutWrap: =true
+                              FillPortions: =0
+                              Height: =If(isMobile, 2 * 96, 84)
+                            Children:
+                              - chi_conKpiAperte:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =84
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                  Children:
+                                    - chi_lblKpiValAperte:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(CountRows(colChiAperte))
+                                          Size: =20
+                                          Color: =If(CountRows(colChiAperte) > 0, colAvviso, colSuccesso)
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - chi_lblKpiTitAperte:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Richieste ancora aperte"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                              - chi_conKpiAnomalie:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =84
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                  Children:
+                                    - chi_lblKpiValAnomalie:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(CountRows(colChiAnomalie))
+                                          Size: =20
+                                          Color: =If(CountRows(colChiAnomalie) > 0, colAvviso, colSuccesso)
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - chi_lblKpiTitAnomalie:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Anomalie (duplicati, attestati mancanti, altre)"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                              - chi_conKpiSegnalazioni:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =84
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                  Children:
+                                    - chi_lblKpiValSegnalazioni:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(CountRows(colChiSegnalazioni))
+                                          Size: =20
+                                          Color: =If(CountRows(colChiSegnalazioni) > 0, colAvviso, colSuccesso)
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - chi_lblKpiTitSegnalazioni:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Segnalazioni dei lavoratori da gestire"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                              - chi_conKpiSenzaCF:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =84
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                  Children:
+                                    - chi_lblKpiValSenzaCF:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(CountRows(colChiSenzaCF))
+                                          Size: =20
+                                          Color: =If(CountRows(colChiSenzaCF) > 0, colErrore, colSuccesso)
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - chi_lblKpiTitSenzaCF:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Lavoratori senza codice fiscale (richieste validate)"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                        - chi_conAzioni:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              LayoutWrap: =true
+                              Height: =If(isMobile, 2 * 48, 48)
+                              FillPortions: =0
+                            Children:
+                              - chi_btnChiudi:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Chiudi il mese"
+                                    OnSelect: |-
+                                      =UpdateContext({locDialogo: "chiudi"})
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =180
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =colPrimario
+                                    Color: =Color.White
+                                    HoverFill: =colPrimarioScuro
+                                    PressedFill: =colPrimarioScuro
+                                    BorderThickness: =0
+                                    Visible: =isHR && !(locChiusura.'Stato del periodo'.Value = "Chiuso")
+                              - chi_btnFilePaghe:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Genera file paghe"
+                                    OnSelect: |-
+                                      =UpdateContext({locDialogo: "paghe"})
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =200
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =colSuccesso
+                                    Color: =Color.White
+                                    HoverFill: =ColorFade(colSuccesso, -15%)
+                                    PressedFill: =ColorFade(colSuccesso, -25%)
+                                    BorderThickness: =0
+                                    DisplayMode: =If(locChiusura.'Stato del periodo'.Value = "Chiuso", DisplayMode.Edit, DisplayMode.Disabled)
+                                    Tooltip: |-
+                                      ="Disponibile quando il mese è chiuso"
+                              - chi_btnApriFile:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Apri il file paghe"
+                                    OnSelect: =Launch(Coalesce(locUrlFile, locChiusura.'File paghe'))
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =200
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =Color.White
+                                    Color: =colPrimario
+                                    HoverFill: =colPrimarioChiaro
+                                    PressedFill: =colPrimarioChiaro
+                                    HoverColor: =colPrimario
+                                    BorderColor: =colPrimario
+                                    BorderThickness: =1
+                                    Visible: =!IsBlank(Coalesce(locUrlFile, locChiusura.'File paghe'))
+                              - chi_btnRiapri:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Riapri il mese"
+                                    OnSelect: |-
+                                      =UpdateContext({locDialogo: "riapri"})
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =180
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =colAvviso
+                                    Color: =Color.White
+                                    HoverFill: =ColorFade(colAvviso, -15%)
+                                    PressedFill: =ColorFade(colAvviso, -25%)
+                                    BorderThickness: =0
+                                    Visible: =isAdmin && locChiusura.'Stato del periodo'.Value = "Chiuso"
+                        - chi_lblSezAperte:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Richieste ancora aperte: " & CountRows(colChiAperte)
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                        - chi_conIntAperte:
+                            Control: GroupContainer@1.3.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =colPrimarioChiaro
+                              Height: =34
+                              FillPortions: =0
+                              Visible: =!isMobile
+                            Children:
+                              - chi_lblIntAperteId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="ID"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.2308 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntAperteLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Lavoratore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.2308
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.2308 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntAperteCoord:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Coordinatore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.4615
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.2308 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntAperteData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Data"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.6923
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1538 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntAperteStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Stato"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.8462
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1538 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                        - chi_galAperte:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =colChiAperte
+                              TemplateSize: =If(isMobile, 88, 44)
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =Set(varIdDettaglio, ThisItem.ID); Set(varDaLinkDiretto, false); Navigate(scrDettaglio, ScreenTransition.None)
+                              FillPortions: =0
+                              Height: =Min(8, Max(1, CountRows(colChiAperte))) * If(isMobile, 88, 44) + 2
+                            Children:
+                              - chi_lblAperteId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.'ID richiesta'
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.2308 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblAperteLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Cognome & " " & ThisItem.Nome
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.2308
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.2308 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblAperteCoord:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Coordinatore
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.4615
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.2308 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblAperteData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Text(ThisItem.'Data sessione formativa', "dd/mm/yyyy")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.6923
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1538 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblAperteStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.'Stato richiesta'.Value
+                                    Size: =10
+                                    Color: =Color.White
+                                    FontWeight: =FontWeight.Semibold
+                                    Fill: =Coalesce(LookUp(tblStati, Stato = ThisItem.'Stato richiesta'.Value, Colore), colTestoSecondario)
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    X: =If(isMobile, Parent.TemplateWidth - Self.Width - 8, 8 + (Parent.TemplateWidth - 16) * 0.8462)
+                                    Y: =If(isMobile, 8, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Width: =If(isMobile, 150, (Parent.TemplateWidth - 16) * 0.1538 - 4)
+                                    Height: =If(isMobile, 22, 34)
+                                    OnSelect: =Select(Parent)
+                              - chi_lblAperteM1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Cognome & " " & ThisItem.Nome
+                                    Size: =12
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8
+                                    Y: =4
+                                    Width: =Parent.TemplateWidth - 170
+                                    Height: =32
+                                    Visible: =isMobile
+                                    OnSelect: =Select(Parent)
+                              - chi_lblAperteM2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.'ID richiesta' & " · " & ThisItem.Coordinatore
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    X: =8
+                                    Y: =36
+                                    Width: =Parent.TemplateWidth - 0 - 16
+                                    Height: =Parent.TemplateHeight - 40
+                                    Visible: =isMobile
+                                    Wrap: =true
+                                    VerticalAlign: =VerticalAlign.Top
+                                    OnSelect: =Select(Parent)
+                              - chi_rctAperteSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+                        - chi_lblSezAnomalie:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Anomalie: " & CountRows(colChiAnomalie)
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                        - chi_conIntAnomalie:
+                            Control: GroupContainer@1.3.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =colPrimarioChiaro
+                              Height: =34
+                              FillPortions: =0
+                              Visible: =!isMobile
+                            Children:
+                              - chi_lblIntAnomalieId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="ID"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.2143 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntAnomalieLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Lavoratore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.2143
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.2143 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntAnomalieTipo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Anomalia"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.4286
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.4286 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntAnomalieStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Stato"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.8571
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1429 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                        - chi_galAnomalie:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =colChiAnomalie
+                              TemplateSize: =If(isMobile, 88, 52)
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =Set(varIdDettaglio, ThisItem.ID); Set(varDaLinkDiretto, false); Navigate(scrDettaglio, ScreenTransition.None)
+                              FillPortions: =0
+                              Height: =Min(8, Max(1, CountRows(colChiAnomalie))) * If(isMobile, 88, 52) + 2
+                            Children:
+                              - chi_lblAnomalieId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.'ID richiesta'
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.2143 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblAnomalieLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Cognome & " " & ThisItem.Nome
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.2143
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.2143 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblAnomalieTipo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Trim(If(ThisItem.'Possibile duplicato', "Possibile duplicato. ", "") & If(!ThisItem.'Attestato presente', "Attestato mancante. ", "") & Coalesce(ThisItem.'Anomalie rilevate', ""))
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.4286
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.4286 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblAnomalieStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.'Stato richiesta'.Value
+                                    Size: =10
+                                    Color: =Color.White
+                                    FontWeight: =FontWeight.Semibold
+                                    Fill: =Coalesce(LookUp(tblStati, Stato = ThisItem.'Stato richiesta'.Value, Colore), colTestoSecondario)
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    X: =If(isMobile, Parent.TemplateWidth - Self.Width - 8, 8 + (Parent.TemplateWidth - 16) * 0.8571)
+                                    Y: =If(isMobile, 8, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Width: =If(isMobile, 150, (Parent.TemplateWidth - 16) * 0.1429 - 4)
+                                    Height: =If(isMobile, 22, 34)
+                                    OnSelect: =Select(Parent)
+                              - chi_lblAnomalieM1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Cognome & " " & ThisItem.Nome
+                                    Size: =12
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8
+                                    Y: =4
+                                    Width: =Parent.TemplateWidth - 170
+                                    Height: =32
+                                    Visible: =isMobile
+                                    OnSelect: =Select(Parent)
+                              - chi_lblAnomalieM2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Trim(If(ThisItem.'Possibile duplicato', "Possibile duplicato. ", "") & If(!ThisItem.'Attestato presente', "Attestato mancante. ", "") & Coalesce(ThisItem.'Anomalie rilevate', ""))
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    X: =8
+                                    Y: =36
+                                    Width: =Parent.TemplateWidth - 0 - 16
+                                    Height: =Parent.TemplateHeight - 40
+                                    Visible: =isMobile
+                                    Wrap: =true
+                                    VerticalAlign: =VerticalAlign.Top
+                                    OnSelect: =Select(Parent)
+                              - chi_rctAnomalieSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+                        - chi_lblSezSegnalazioni:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Segnalazioni di variazione da gestire: " & CountRows(colChiSegnalazioni)
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                        - chi_conIntSegnalazioni:
+                            Control: GroupContainer@1.3.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =colPrimarioChiaro
+                              Height: =34
+                              FillPortions: =0
+                              Visible: =!isMobile
+                            Children:
+                              - chi_lblIntSegnalazioniNom:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Lavoratore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.3000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntSegnalazioniTesto:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Segnalazione"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.3000
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.7000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                        - chi_galSegnalazioni:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =colChiSegnalazioni
+                              TemplateSize: =If(isMobile, 110, 64)
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =false
+                              FillPortions: =0
+                              Height: =Min(6, Max(1, CountRows(colChiSegnalazioni))) * If(isMobile, 110, 64) + 2
+                            Children:
+                              - chi_lblSegnalazioniNom:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Nominativo & Char(10) & ThisItem.'Login Microsoft 365'
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.3000 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblSegnalazioniTesto:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.'Segnalazione variazione dati'
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.3000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.7000 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblSegnalazioniM1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Nominativo
+                                    Size: =12
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8
+                                    Y: =4
+                                    Width: =Parent.TemplateWidth - 16
+                                    Height: =32
+                                    Visible: =isMobile
+                                    OnSelect: =Select(Parent)
+                              - chi_lblSegnalazioniM2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.'Segnalazione variazione dati'
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    X: =8
+                                    Y: =36
+                                    Width: =Parent.TemplateWidth - 40 - 16
+                                    Height: =Parent.TemplateHeight - 40
+                                    Visible: =isMobile
+                                    Wrap: =true
+                                    VerticalAlign: =VerticalAlign.Top
+                                    OnSelect: =Select(Parent)
+                              - chi_icoGestita:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.Check
+                                    OnSelect: |-
+                                      =// IfError(azione1, errore1, azione2, errore2, finale): si ferma al primo errore
+                                      With(
+                                          {lav: ThisItem},
+                                          IfError(
+                                              Patch(Lavoratori, LookUp(Lavoratori, ID = lav.ID), {'Segnalazione da gestire': false}),
+                                              Notify("Aggiornamento non riuscito: " & FirstError.Message, NotificationType.Error),
+                                              If(
+                                                  isAdmin,
+                                                  Patch(
+                                                      'Registro modifiche',
+                                                      Defaults('Registro modifiche'),
+                                                      {
+                                                          Azione: "Segnalazione gestita",
+                                                          Lista: "Lavoratori",
+                                                          'ID elemento': Text(lav.ID),
+                                                          Campo: "Segnalazione da gestire",
+                                                          'Valore precedente': "Sì",
+                                                          'Valore nuovo': "No",
+                                                          Ruolo: {Value: "Amministratore"},
+                                                          'Login autore': recProfilo.login,
+                                                          Nota: ""
+                                                      }
+                                                  )
+                                              ),
+                                              Notify("Segnalazione aggiornata, ma il Registro modifiche non è stato scritto: " & FirstError.Message, NotificationType.Warning),
+                                              RemoveIf(colChiSegnalazioni, ID = lav.ID);
+                                              Notify("Segnalazione di " & lav.Nominativo & " segnata come gestita. Ricorda di aggiornare i dati del lavoratore se necessario.", NotificationType.Success)
+                                          )
+                                      )
+                                    Color: =colSuccesso
+                                    Tooltip: |-
+                                      ="Segna come gestita"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =Parent.TemplateWidth - 40 + 4
+                                    Y: =If(isMobile, Parent.TemplateHeight - Self.Height - 8, (Parent.TemplateHeight - Self.Height) / 2)
+                              - chi_rctSegnalazioniSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+                        - chi_lblSezSenzaCF:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Lavoratori senza codice fiscale con richieste validate nel mese: " & CountRows(colChiSenzaCF)
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                        - chi_conIntSenzaCF:
+                            Control: GroupContainer@1.3.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =colPrimarioChiaro
+                              Height: =34
+                              FillPortions: =0
+                              Visible: =!isMobile
+                            Children:
+                              - chi_lblIntSenzaCFNom:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Lavoratore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.3333 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntSenzaCFLogin:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Login"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.3333
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.3333 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntSenzaCFSpazio:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Codice fiscale"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.6667
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.3333 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                        - chi_galSenzaCF:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =colChiSenzaCF
+                              TemplateSize: =If(isMobile, 96, 52)
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =false
+                              FillPortions: =0
+                              Height: =Min(6, Max(1, CountRows(colChiSenzaCF))) * If(isMobile, 96, 52) + 2
+                            Children:
+                              - chi_lblSenzaCFNom:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Nominativo
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.3333 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblSenzaCFLogin:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.'Login Microsoft 365'
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.3333
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.3333 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblSenzaCFSpazio:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =""
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.6667
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.3333 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblSenzaCFM1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Nominativo
+                                    Size: =12
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8
+                                    Y: =4
+                                    Width: =Parent.TemplateWidth - 16
+                                    Height: =32
+                                    Visible: =isMobile
+                                    OnSelect: =Select(Parent)
+                              - chi_lblSenzaCFM2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.'Login Microsoft 365'
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    X: =8
+                                    Y: =36
+                                    Width: =Parent.TemplateWidth - 40 - 16
+                                    Height: =Parent.TemplateHeight - 40
+                                    Visible: =isMobile
+                                    Wrap: =true
+                                    VerticalAlign: =VerticalAlign.Top
+                                    OnSelect: =Select(Parent)
+                              - chi_icoSalvaCF:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.Save
+                                    OnSelect: |-
+                                      =With(
+                                          {lav: ThisItem, cf: Upper(Trim(chi_txtRigaCF.Text))},
+                                          If(
+                                              !IsMatch(cf, "^[A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z]$"),
+                                              Notify("Il codice fiscale non è valido: controlla i 16 caratteri.", NotificationType.Error),
+                                              IfError(
+                                                  Patch(
+                                                      Lavoratori,
+                                                      LookUp(Lavoratori, ID = lav.ID),
+                                                      {'Codice fiscale': cf, 'Codice fiscale (mascherato)': Left(cf, 3) & "**********" & Right(cf, 3), 'Codice fiscale registrato': true}
+                                                  ),
+                                                  Notify("Salvataggio non riuscito: " & FirstError.Message, NotificationType.Error),
+                                                  If(
+                                                      isAdmin,
+                                                      Patch(
+                                                          'Registro modifiche',
+                                                          Defaults('Registro modifiche'),
+                                                          {
+                                                              Azione: "Correzione codice fiscale",
+                                                              Lista: "Lavoratori",
+                                                              'ID elemento': Text(lav.ID),
+                                                              Campo: "Codice fiscale",
+                                                              'Valore precedente': "",
+                                                              'Valore nuovo': "Codice fiscale aggiornato",
+                                                              Ruolo: {Value: "Amministratore"},
+                                                              'Login autore': recProfilo.login,
+                                                              Nota: ""
+                                                          }
+                                                      )
+                                                  ),
+                                                  Notify("Codice fiscale salvato, ma il Registro modifiche non è stato scritto: " & FirstError.Message, NotificationType.Warning),
+                                                  RemoveIf(colChiSenzaCF, ID = lav.ID);
+                                                  Notify("Codice fiscale di " & lav.Nominativo & " salvato.", NotificationType.Success)
+                                              )
+                                          )
+                                      )
+                                    Color: =colPrimario
+                                    Tooltip: |-
+                                      ="Salva il codice fiscale"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =Parent.TemplateWidth - 40 + 4
+                                    Y: =If(isMobile, Parent.TemplateHeight - Self.Height - 8, (Parent.TemplateHeight - Self.Height) / 2)
+                              - chi_txtRigaCF:
+                                  Control: Classic/TextInput@2.3.2
+                                  Properties:
+                                    Default: |-
+                                      =""
+                                    HintText: |-
+                                      ="Codice fiscale"
+                                    Size: =12
+                                    BorderColor: =colBordo
+                                    Height: =34
+                                    RadiusTopLeft: =4
+                                    RadiusTopRight: =4
+                                    RadiusBottomLeft: =4
+                                    RadiusBottomRight: =4
+                                    MaxLength: =16
+                                    X: =If(isMobile, 8, 8 + (Parent.TemplateWidth - 56) * 0.6667)
+                                    Y: =If(isMobile, Parent.TemplateHeight - 44, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Width: =If(isMobile, Parent.TemplateWidth - 64, (Parent.TemplateWidth - 56) * 0.3333 - 8)
+                              - chi_rctSenzaCFSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+                        - chi_lblSezStorico:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Storico delle chiusure"
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                        - chi_conIntStoricoChiusure:
+                            Control: GroupContainer@1.3.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =colPrimarioChiaro
+                              Height: =34
+                              FillPortions: =0
+                              Visible: =!isMobile
+                            Children:
+                              - chi_lblIntStoricoChiusurePeriodo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Periodo"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.1429 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntStoricoChiusureStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Stato"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.1429
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.1429 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntStoricoChiusureChiusura:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Chiusura"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.2857
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.2143 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - chi_lblIntStoricoChiusureNum:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Richieste"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.5000
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.0714 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                              - chi_lblIntStoricoChiusureOre:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Ore / gettoni"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.5714
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.1429 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                              - chi_lblIntStoricoChiusureFile:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="File paghe"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.7143
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.0714 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                              - chi_lblIntStoricoChiusureRiap:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Riapertura"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.7857
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.2143 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                        - chi_galStoricoChiusure:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =Sort('Chiusure mensili', Periodo, SortOrder.Descending)
+                              TemplateSize: =If(isMobile, 88, 52)
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =false
+                              FillPortions: =0
+                              Height: =8 * If(isMobile, 88, 52) + 2
+                            Children:
+                              - chi_lblStoricoChiusurePeriodo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Periodo
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.1429 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblStoricoChiusureStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.'Stato del periodo'.Value
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.1429
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.1429 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblStoricoChiusureChiusura:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Text(ThisItem.'Data chiusura', "dd/mm/yyyy") & Char(10) & ThisItem.'Utente chiusura'
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.2857
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.2143 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblStoricoChiusureNum:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.'Numero richieste incluse'
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.5000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.0714 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblStoricoChiusureOre:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Text(ThisItem.'Totale ore riconosciute', "[$-en-US]#,##0.##") & " / " & Text(ThisItem.'Totale gettoni', "[$-en-US]#,##0.##")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.5714
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.1429 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblStoricoChiusureFile:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =If(ThisItem.'File paghe generato', "v" & ThisItem.'Versione file paghe' & " ✓", "—")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.7143
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.0714 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblStoricoChiusureRiap:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =If(IsBlank(ThisItem.'Data riapertura'), "", Text(ThisItem.'Data riapertura', "dd/mm/yyyy") & ": " & ThisItem.'Motivo riapertura')
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.7857
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.2143 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - chi_lblStoricoChiusureM1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Periodo & " · " & ThisItem.'Stato del periodo'.Value
+                                    Size: =12
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8
+                                    Y: =4
+                                    Width: =Parent.TemplateWidth - 16
+                                    Height: =32
+                                    Visible: =isMobile
+                                    OnSelect: =Select(Parent)
+                              - chi_lblStoricoChiusureM2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Richieste: " & ThisItem.'Numero richieste incluse' & " · ore " & Text(ThisItem.'Totale ore riconosciute', "[$-en-US]#,##0.##") & If(ThisItem.'File paghe generato', " · file v" & ThisItem.'Versione file paghe', "")
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    X: =8
+                                    Y: =36
+                                    Width: =Parent.TemplateWidth - 40 - 16
+                                    Height: =Parent.TemplateHeight - 40
+                                    Visible: =isMobile
+                                    Wrap: =true
+                                    VerticalAlign: =VerticalAlign.Top
+                                    OnSelect: =Select(Parent)
+                              - chi_icoApriStorico:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.Download
+                                    OnSelect: =Launch(ThisItem.'File paghe')
+                                    Color: =colPrimario
+                                    Tooltip: |-
+                                      ="Apri il file paghe"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    Visible: =!IsBlank(ThisItem.'File paghe')
+                                    X: =Parent.TemplateWidth - 40 + 4
+                                    Y: =If(isMobile, Parent.TemplateHeight - Self.Height - 8, (Parent.TemplateHeight - Self.Height) / 2)
+                              - chi_rctStoricoChiusureSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+      - chi_conDialogo:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =!IsBlank(locDialogo)
+          Children:
+            - chi_rctDialogoVelo:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =colVelo
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - chi_conDialogoBox:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.Bold
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(520, Parent.Width - 32)
+                  Height: =If(chi_txtDialogoNota.Visible, 380, 290)
+                  PaddingTop: =20
+                  PaddingBottom: =20
+                  PaddingLeft: =20
+                  PaddingRight: =20
+                  RadiusTopLeft: =8
+                  RadiusTopRight: =8
+                  RadiusBottomLeft: =8
+                  RadiusBottomRight: =8
+                Children:
+                  - chi_lblDialogoTitolo:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =Switch(locDialogo, "chiudi", "Chiudi il mese", "riapri", "Riapri il mese", "Genera il file paghe")
+                        Size: =16
+                        Color: =colPrimario
+                        FontWeight: =FontWeight.Semibold
+                        Height: =32
+                        FillPortions: =0
+                  - chi_lblDialogoTesto:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          =Switch(
+                              locDialogo,
+                              "chiudi",
+                              "Chiudere il mese " & locPeriodo & "? Le richieste validate diventeranno «Inclusa nel riepilogo mensile» e nel mese non saranno più possibili inserimenti o modifiche." &
+                              If(CountRows(colChiAperte) > 0, " ATTENZIONE: ci sono " & CountRows(colChiAperte) & " richieste ancora aperte, che resteranno bloccate fino a un’eventuale riapertura da parte dell’Amministratore.", "") &
+                              " Puoi aggiungere una nota (facoltativa).",
+                              "riapri",
+                              "Riaprire il mese " & locPeriodo & "? Le richieste torneranno modificabili secondo il loro stato. La motivazione è obbligatoria e viene registrata.",
+                              "Generare il file paghe di " & locPeriodo & "? Le richieste incluse passeranno a «Inviata a Payroll» e il collegamento sarà inviato ai destinatari configurati." &
+                              If(locChiusura.'File paghe generato', " Esiste già un file per il periodo: verrà creata una nuova versione.", "")
+                          )
+                        Size: =12
+                        Color: =colTesto
+                        Wrap: =true
+                        FillPortions: =1
+                        VerticalAlign: =VerticalAlign.Top
+                        LayoutMinHeight: =60
+                  - chi_txtDialogoNota:
+                      Control: Classic/TextInput@2.3.2
+                      Properties:
+                        Default: |-
+                          =""
+                        HintText: =If(locDialogo = "riapri", "Motivazione della riapertura (obbligatoria)", "Note HR (facoltative)")
+                        Size: =12
+                        BorderColor: =colBordo
+                        Height: =80
+                        FillPortions: =0
+                        RadiusTopLeft: =4
+                        RadiusTopRight: =4
+                        RadiusBottomLeft: =4
+                        RadiusBottomRight: =4
+                        Mode: =TextMode.MultiLine
+                        Visible: =locDialogo = "chiudi" || locDialogo = "riapri"
+                  - chi_conDialogoPulsanti:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutJustifyContent: =LayoutJustifyContent.End
+                        LayoutGap: =8
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(0, 0, 0, 0)
+                        Height: =44
+                        FillPortions: =0
+                      Children:
+                        - chi_btnDialogoAnnulla:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              Text: |-
+                                ="Annulla"
+                              OnSelect: |-
+                                =UpdateContext({locDialogo: ""})
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Height: =40
+                              Width: =140
+                              FillPortions: =0
+                              RadiusTopLeft: =6
+                              RadiusTopRight: =6
+                              RadiusBottomLeft: =6
+                              RadiusBottomRight: =6
+                              DisabledFill: =RGBA(200, 200, 200, 1)
+                              DisabledColor: =RGBA(110, 110, 110, 1)
+                              Fill: =Color.White
+                              Color: =colPrimario
+                              HoverFill: =colPrimarioChiaro
+                              PressedFill: =colPrimarioChiaro
+                              HoverColor: =colPrimario
+                              BorderColor: =colPrimario
+                              BorderThickness: =1
+                        - chi_btnDialogoConferma:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              Text: =Switch(locDialogo, "chiudi", "Chiudi il mese", "riapri", "Riapri", "Genera")
+                              OnSelect: |-
+                                =Set(varCaricamento, true);
+                                Set(varMessaggioCaricamento, "Operazione in corso…");
+                                Switch(
+                                    locDialogo,
+                                    "chiudi",
+                                        With(
+                                            {r: IfError(
+                                                SDF_API08_ChiusuraMensile.Run(chi_ddAnno.Selected.Num, chi_ddMese.Selected.Num, "chiudi", Trim(chi_txtDialogoNota.Text)),
+                                                {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                                            )},
+                                            If(
+                                                r.esito = "OK",
+                                                Notify(Coalesce(r.messaggio, "Mese chiuso."), NotificationType.Success);
+                                                UpdateContext({locDialogo: ""});
+                                                Reset(chi_txtDialogoNota);
+                                                Select(chi_btnVerifica),
+                                                Notify(r.messaggio, NotificationType.Error)
+                                            )
+                                        ),
+                                    "riapri",
+                                        With(
+                                            {r: IfError(
+                                                SDF_API08_ChiusuraMensile.Run(chi_ddAnno.Selected.Num, chi_ddMese.Selected.Num, "riapri", Trim(chi_txtDialogoNota.Text)),
+                                                {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                                            )},
+                                            If(
+                                                r.esito = "OK",
+                                                Notify(Coalesce(r.messaggio, "Mese riaperto."), NotificationType.Success);
+                                                UpdateContext({locDialogo: ""});
+                                                Reset(chi_txtDialogoNota);
+                                                Select(chi_btnVerifica),
+                                                Notify(r.messaggio, NotificationType.Error)
+                                            )
+                                        ),
+                                    "paghe",
+                                        With(
+                                            {r: IfError(
+                                                SDF_API09_FilePaghe.Run(chi_ddAnno.Selected.Num, chi_ddMese.Selected.Num),
+                                                {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                                            )},
+                                            If(
+                                                r.esito = "OK",
+                                                With(
+                                                    {d: IfError(ParseJSON(r.dati), ParseJSON("{}"))},
+                                                    UpdateContext({locUrlFile: Text(d.url), locDialogo: ""});
+                                                    Notify(
+                                                        "File paghe generato con " & Text(d.richieste) & " richieste: usa «Apri il file paghe»." &
+                                                        If(Coalesce(Value(d.senzaCodiceFiscale), 0) > 0, " Attenzione: " & Text(d.senzaCodiceFiscale) & " righe senza codice fiscale.", ""),
+                                                        If(Coalesce(Value(d.senzaCodiceFiscale), 0) > 0, NotificationType.Warning, NotificationType.Success)
+                                                    )
+                                                );
+                                                Select(chi_btnVerifica),
+                                                Notify(r.messaggio, NotificationType.Error)
+                                            )
+                                        )
+                                );
+                                Set(varCaricamento, false)
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Height: =40
+                              Width: =180
+                              FillPortions: =0
+                              RadiusTopLeft: =6
+                              RadiusTopRight: =6
+                              RadiusBottomLeft: =6
+                              RadiusBottomRight: =6
+                              DisabledFill: =RGBA(200, 200, 200, 1)
+                              DisabledColor: =RGBA(110, 110, 110, 1)
+                              Fill: =If(locDialogo = "riapri", colAvviso, colPrimario)
+                              Color: =Color.White
+                              HoverFill: =colPrimarioScuro
+                              PressedFill: =colPrimarioScuro
+                              BorderThickness: =0
+                              DisplayMode: =If(locDialogo <> "riapri" || !IsBlank(Trim(chi_txtDialogoNota.Text)), DisplayMode.Edit, DisplayMode.Disabled)
+      - chi_conCaricamento:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =varCaricamento
+          Children:
+            - chi_rctCaricamento:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =RGBA(255, 255, 255, 0.65)
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - chi_lblCaricamento:
+                Control: Label@2.5.1
+                Properties:
+                  Text: =Coalesce(varMessaggioCaricamento, "Caricamento in corso…") & Char(10) & "Attendere qualche secondo."
+                  Size: =14
+                  Color: =colPrimario
+                  FontWeight: =FontWeight.Semibold
+                  Align: =Align.Center
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(360, Parent.Width - 32)
+                  Height: =96
+                  Wrap: =true
+                  BorderColor: =colBordo
+                  BorderThickness: =1

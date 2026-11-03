@@ -1,0 +1,973 @@
+# =============================================================================
+#  Gestione ore formazione – Società Dolce · schermata scrMieRichieste
+#  2 – Le mie richieste (lavoratore)
+# -----------------------------------------------------------------------------
+#  Formato: sorgente YAML di Power Apps Studio (Copia codice / Incolla codice).
+#  Come incollarla: vedere powerapps/README.md. Le formule sono in notazione
+#  inglese (separatore "," e concatenazione ";"): Studio in italiano le mostra
+#  con ";" e ";;" automaticamente.
+#  Dati: SDF_API02 (elenco), SDF_API03 «annulla»; lettura diretta di 'Chiusure mensili'.
+# =============================================================================
+Screens:
+  scrMieRichieste:
+    Properties:
+      Fill: =colSfondo
+      OnVisible: |-
+        =Set(varMenuAperto, false);
+        UpdateContext({locDialogo: "", locIdAnnulla: 0, locCodAnnulla: ""});
+        Reset(mie_ddStato);
+        If(
+            !varMieCaricate,
+            Set(varCaricamento, true);
+            Set(varMessaggioCaricamento, "Caricamento delle tue richieste…");
+            With(
+                {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                If(
+                    rm.esito = "OK",
+                    Set(varJsonMieRichieste, rm.dati);
+                    Set(varMieCaricate, true),
+                    Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                )
+            );
+            Set(varCaricamento, false)
+        );
+        // mesi chiusi (lista leggibile da tutti): servono a nascondere Modifica/Annulla
+        ClearCollect(
+            colMesiChiusi,
+            ShowColumns(Filter('Chiusure mensili', 'Stato del periodo'.Value = "Chiuso"), Periodo, Anno, Mese)
+        )
+    Children:
+      - mie_conRadice:
+          Control: GroupContainer@1.3.0
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutJustifyContent: =LayoutJustifyContent.Start
+            LayoutGap: =0
+            DropShadow: =DropShadow.None
+            Fill: =colSfondo
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+          Children:
+            - mie_conHeader:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.None
+                  Fill: =colPrimario
+                  Height: =56
+                  FillPortions: =0
+                  PaddingLeft: =12
+                  PaddingRight: =16
+                Children:
+                  - mie_icoMenu:
+                      Control: Classic/Icon@2.5.0
+                      Properties:
+                        Icon: =Icon.Hamburger
+                        OnSelect: =Set(varMenuAperto, !varMenuAperto)
+                        Color: =Color.White
+                        Tooltip: |-
+                          ="Apri o chiudi il menu"
+                        Width: =40
+                        Height: =40
+                        PaddingTop: =4
+                        PaddingBottom: =4
+                        PaddingLeft: =4
+                        PaddingRight: =4
+                        FillPortions: =0
+                        Visible: =isMobile
+                  - mie_lblTitoloApp:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Gestione ore formazione"
+                        Size: =16
+                        Color: =Color.White
+                        FontWeight: =FontWeight.Semibold
+                        FillPortions: =1
+                        Height: =40
+                        LayoutMinWidth: =150
+                  - mie_lblUtente:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =User().FullName & If(haRuolo, " · " & ruoloApp, "")
+                        Size: =11
+                        Color: =Color.White
+                        Align: =Align.Right
+                        Width: =340
+                        Height: =40
+                        FillPortions: =0
+                        Visible: =!isMobile
+            - mie_conCorpo:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =0
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(0, 0, 0, 0)
+                  FillPortions: =1
+                Children:
+                  - mie_conMenu:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =0
+                        DropShadow: =DropShadow.None
+                        Fill: =colSuperficie
+                        Width: =If(isMobile, Parent.Width, 230)
+                        FillPortions: =0
+                        Visible: =!isMobile || varMenuAperto
+                        BorderColor: =colBordo
+                        BorderThickness: =1
+                        PaddingTop: =8
+                      Children:
+                        - mie_lblMenuUtente:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: =User().FullName & Char(10) & ruoloApp
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Visible: =isMobile
+                              Height: =48
+                              FillPortions: =0
+                              PaddingLeft: =12
+                              Wrap: =true
+                        - mie_galMenu:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =tblMenu
+                              TemplateSize: =48
+                              TemplatePadding: =0
+                              ShowScrollbar: =false
+                              BorderColor: =colBordo
+                              BorderThickness: =0
+                              Fill: =RGBA(0, 0, 0, 0)
+                              TemplateFill: =If(ThisItem.Chiave = "mie", colPrimarioChiaro, RGBA(0, 0, 0, 0))
+                              OnSelect: |-
+                                =Set(varMenuAperto, false);
+                                Switch(
+                                    ThisItem.Chiave,
+                                    "home", Navigate(scrHome, ScreenTransition.None),
+                                    "mie", Navigate(scrMieRichieste, ScreenTransition.None),
+                                    "nuova", Set(varIdModifica, 0); Navigate(scrRichiesta, ScreenTransition.None),
+                                    "team", Navigate(scrTeam, ScreenTransition.None),
+                                    "validazione", Navigate(scrValidazioneHR, ScreenTransition.None),
+                                    "riepilogo", Navigate(scrRiepilogo, ScreenTransition.None),
+                                    "chiusura", Navigate(scrChiusura, ScreenTransition.None),
+                                    "admin", Navigate(scrAdmin, ScreenTransition.None),
+                                    "profilo", Navigate(scrProfilo, ScreenTransition.None)
+                                )
+                              DisplayMode: =If(false, DisplayMode.Disabled, DisplayMode.Edit)
+                              FillPortions: =1
+                            Children:
+                              - mie_icoVoceMenu:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =ThisItem.Icona
+                                    OnSelect: =Select(Parent)
+                                    Color: =If(ThisItem.Chiave = "mie", colPrimario, colTestoSecondario)
+                                    Tooltip: |-
+                                      =""
+                                    Width: =28
+                                    Height: =28
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =12
+                                    Y: =(Parent.TemplateHeight - Self.Height) / 2
+                              - mie_lblVoceMenu:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Voce
+                                    Size: =12
+                                    Color: =If(ThisItem.Chiave = "mie", colPrimario, colTesto)
+                                    FontWeight: =If(ThisItem.Chiave = "mie", FontWeight.Semibold, FontWeight.Normal)
+                                    X: =48
+                                    Y: =0
+                                    Width: =Parent.TemplateWidth - 56
+                                    Height: =Parent.TemplateHeight
+                                    OnSelect: =Select(Parent)
+                              - mie_rctVoceAttiva:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colPrimario
+                                    Height: =Parent.TemplateHeight
+                                    X: =0
+                                    Y: =0
+                                    Width: =4
+                                    Visible: =ThisItem.Chiave = "mie"
+                  - mie_conContenuto:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =12
+                        DropShadow: =DropShadow.None
+                        Fill: =colSfondo
+                        FillPortions: =1
+                        Visible: =!isMobile || !varMenuAperto
+                        PaddingTop: =16
+                        PaddingBottom: =16
+                        PaddingLeft: =If(isMobile, 12, 24)
+                        PaddingRight: =If(isMobile, 12, 24)
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                      Children:
+                        - mie_conTitolo:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              Height: =44
+                              FillPortions: =0
+                            Children:
+                              - mie_lblTitolo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Le mie richieste"
+                                    Size: =18
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =36
+                                    FillPortions: =1
+                              - mie_icoAggiorna:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.Reload
+                                    OnSelect: |-
+                                      =Set(varCaricamento, true);
+                                      Set(varMessaggioCaricamento, "Aggiornamento…");
+                                      With(
+                                          {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                          If(
+                                              rm.esito = "OK",
+                                              Set(varJsonMieRichieste, rm.dati);
+                                              Set(varMieCaricate, true),
+                                              Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                                          )
+                                      );
+                                      ClearCollect(
+                                          colMesiChiusi,
+                                          ShowColumns(Filter('Chiusure mensili', 'Stato del periodo'.Value = "Chiuso"), Periodo, Anno, Mese)
+                                      );
+                                      Set(varCaricamento, false)
+                                    Color: =colPrimario
+                                    Tooltip: |-
+                                      ="Aggiorna l’elenco"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    FillPortions: =0
+                              - mie_btnNuova:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="+ Nuova richiesta"
+                                    OnSelect: =Set(varIdModifica, 0); Navigate(scrRichiesta, ScreenTransition.None)
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =40
+                                    Width: =190
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =colPrimario
+                                    Color: =Color.White
+                                    HoverFill: =colPrimarioScuro
+                                    PressedFill: =colPrimarioScuro
+                                    BorderThickness: =0
+                        - mie_rigaFiltri:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              FillPortions: =0
+                              Height: =If(isMobile, 76 + 76 + 76, 64)
+                            Children:
+                              - mie_conCampoAnno:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - mie_lblCampoAnno:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Anno"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - mie_ddAnno:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =tblAnniFiltro
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            ="Tutti gli anni"
+                              - mie_conCampoMese:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - mie_lblCampoMese:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Mese"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - mie_ddMese:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =tblMesiFiltro
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            ="Tutti i mesi"
+                              - mie_conCampoStato:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - mie_lblCampoStato:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Stato"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - mie_ddStato:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =tblFiltroStatiMie
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: =Coalesce(LookUp(tblFiltroStatiMie, Gruppo = varFiltroGruppoMie).Value, "Tutti gli stati")
+                                          OnChange: =Set(varFiltroGruppoMie, Self.Selected.Gruppo)
+                        - mie_lblConteggio:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                =CountRows(mie_galRichieste.AllItems) & " richieste · ore richieste: " & Text(Sum(mie_galRichieste.AllItems, oreRichiesteTotali), "[$-en-US]0.##") & " · ore riconosciute da HR: " & Text(Sum(Filter(mie_galRichieste.AllItems, gruppo = "approvata"), oreRetribuiteHR + oreGettoneHR), "[$-en-US]0.##")
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Height: =24
+                              FillPortions: =0
+                        - mie_conIntRichieste:
+                            Control: GroupContainer@1.3.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =colPrimarioChiaro
+                              Height: =34
+                              FillPortions: =0
+                              Visible: =!isMobile
+                            Children:
+                              - mie_lblIntRichiesteId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="ID richiesta"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 144) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.Width - 144) * 0.1500 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - mie_lblIntRichiesteData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Data corso"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 144) * 0.1500
+                                    Y: =0
+                                    Width: =(Parent.Width - 144) * 0.1000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - mie_lblIntRichiesteTitolo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Titolo corso"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 144) * 0.2500
+                                    Y: =0
+                                    Width: =(Parent.Width - 144) * 0.2500 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - mie_lblIntRichiesteOre:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Ore richieste"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 144) * 0.5000
+                                    Y: =0
+                                    Width: =(Parent.Width - 144) * 0.1500 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - mie_lblIntRichiesteAttestato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Attestato"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 144) * 0.6500
+                                    Y: =0
+                                    Width: =(Parent.Width - 144) * 0.1000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - mie_lblIntRichiesteModifica:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Ultima modifica"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 144) * 0.7500
+                                    Y: =0
+                                    Width: =(Parent.Width - 144) * 0.1500 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - mie_lblIntRichiesteStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Stato"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 144) * 0.9000
+                                    Y: =0
+                                    Width: =(Parent.Width - 144) * 0.1000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                        - mie_galRichieste:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: |-
+                                =Sort(
+                                    Filter(
+                                        colMieRichieste,
+                                        mie_ddAnno.Selected.Num = 0 || annoCompetenza = mie_ddAnno.Selected.Num,
+                                        mie_ddMese.Selected.Num = 0 || meseCompetenza = mie_ddMese.Selected.Num,
+                                        Switch(
+                                            mie_ddStato.Selected.Gruppo,
+                                            "tutti", true,
+                                            "attesa_integr", gruppo = "attesa" || gruppo = "integrazione",
+                                            gruppo = mie_ddStato.Selected.Gruppo
+                                        )
+                                    ),
+                                    modificato,
+                                    SortOrder.Descending
+                                )
+                              TemplateSize: =If(isMobile, 88, 52)
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =Set(varIdDettaglio, ThisItem.id); Set(varDaLinkDiretto, false); Navigate(scrDettaglio, ScreenTransition.None)
+                              FillPortions: =1
+                              LayoutMinHeight: =320
+                            Children:
+                              - mie_lblRichiesteId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.idRichiesta
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 128) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 128) * 0.1500 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - mie_lblRichiesteData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Text(ThisItem.dataSessione, "dd/mm/yyyy")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 128) * 0.1500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 128) * 0.1000 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - mie_lblRichiesteTitolo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.titolo
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 128) * 0.2500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 128) * 0.2500 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - mie_lblRichiesteOre:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Text(ThisItem.oreRichiesteTotali, "[$-en-US]0.##") & " h (" & Text(ThisItem.oreRetribuiteRichieste, "[$-en-US]0.##") & " retr. + " & Text(ThisItem.oreGettoneRichieste, "[$-en-US]0.##") & " gett.)"
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 128) * 0.5000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 128) * 0.1500 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - mie_lblRichiesteAttestato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =If(ThisItem.attestatoPresente, "✓ caricato", "—")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 128) * 0.6500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 128) * 0.1000 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - mie_lblRichiesteModifica:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Text(ThisItem.modificato, "dd/mm/yyyy hh:mm")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 128) * 0.7500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 128) * 0.1500 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - mie_lblRichiesteStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.stato
+                                    Size: =10
+                                    Color: =Color.White
+                                    FontWeight: =FontWeight.Semibold
+                                    Fill: =ThisItem.colore
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    X: =If(isMobile, Parent.TemplateWidth - Self.Width - 8, 8 + (Parent.TemplateWidth - 128) * 0.9000)
+                                    Y: =If(isMobile, 8, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Width: =If(isMobile, 150, (Parent.TemplateWidth - 128) * 0.1000 - 4)
+                                    Height: =If(isMobile, 22, 34)
+                                    OnSelect: =Select(Parent)
+                              - mie_lblRichiesteM1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.titolo
+                                    Size: =12
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8
+                                    Y: =4
+                                    Width: =Parent.TemplateWidth - 170
+                                    Height: =32
+                                    Visible: =isMobile
+                                    OnSelect: =Select(Parent)
+                              - mie_lblRichiesteM2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =ThisItem.idRichiesta & " · " & Text(ThisItem.dataSessione, "dd/mm/yyyy") & " · " & Text(ThisItem.oreRichiesteTotali, "[$-en-US]0.##") & " h (" & Text(ThisItem.oreRetribuiteRichieste, "[$-en-US]0.##") & " retr. + " & Text(ThisItem.oreGettoneRichieste, "[$-en-US]0.##") & " gett.)" & If(ThisItem.attestatoPresente, " · attestato ✓", "")
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    X: =8
+                                    Y: =36
+                                    Width: =Parent.TemplateWidth - 112 - 16
+                                    Height: =Parent.TemplateHeight - 40
+                                    Visible: =isMobile
+                                    Wrap: =true
+                                    VerticalAlign: =VerticalAlign.Top
+                                    OnSelect: =Select(Parent)
+                              - mie_icoVedi:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.View
+                                    OnSelect: =Select(Parent)
+                                    Color: =colPrimario
+                                    Tooltip: |-
+                                      ="Visualizza"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =Parent.TemplateWidth - 112 + 4
+                                    Y: =If(isMobile, Parent.TemplateHeight - Self.Height - 8, (Parent.TemplateHeight - Self.Height) / 2)
+                              - mie_icoModifica:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.Edit
+                                    OnSelect: =Set(varIdModifica, ThisItem.id); Navigate(scrRichiesta, ScreenTransition.None)
+                                    Color: =colPrimario
+                                    Tooltip: |-
+                                      ="Modifica la richiesta"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    Visible: =ThisItem.modificabile && !!IsBlank(LookUp(colMesiChiusi, Anno = ThisItem.annoCompetenza && Mese = ThisItem.meseCompetenza))
+                                    X: =Parent.TemplateWidth - 76 + 4
+                                    Y: =If(isMobile, Parent.TemplateHeight - Self.Height - 8, (Parent.TemplateHeight - Self.Height) / 2)
+                              - mie_icoAnnulla:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.Cancel
+                                    OnSelect: |-
+                                      =UpdateContext({locDialogo: "annulla", locIdAnnulla: ThisItem.id, locCodAnnulla: ThisItem.idRichiesta})
+                                    Color: =colErrore
+                                    Tooltip: |-
+                                      ="Annulla la richiesta"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    Visible: =ThisItem.annullabile && !!IsBlank(LookUp(colMesiChiusi, Anno = ThisItem.annoCompetenza && Mese = ThisItem.meseCompetenza))
+                                    X: =Parent.TemplateWidth - 40 + 4
+                                    Y: =If(isMobile, Parent.TemplateHeight - Self.Height - 8, (Parent.TemplateHeight - Self.Height) / 2)
+                              - mie_rctRichiesteSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+                        - mie_lblVuoto:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Nessuna richiesta trovata con i filtri scelti. Usa «+ Nuova richiesta» per inserire una formazione."
+                              Size: =12
+                              Color: =colTestoSecondario
+                              Height: =40
+                              Wrap: =true
+                              FillPortions: =0
+                              Visible: =CountRows(mie_galRichieste.AllItems) = 0
+      - mie_conDialogo:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =!IsBlank(locDialogo)
+          Children:
+            - mie_rctDialogoVelo:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =colVelo
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - mie_conDialogoBox:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.Bold
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(520, Parent.Width - 32)
+                  Height: =If(mie_txtDialogoNota.Visible, 380, 290)
+                  PaddingTop: =20
+                  PaddingBottom: =20
+                  PaddingLeft: =20
+                  PaddingRight: =20
+                  RadiusTopLeft: =8
+                  RadiusTopRight: =8
+                  RadiusBottomLeft: =8
+                  RadiusBottomRight: =8
+                Children:
+                  - mie_lblDialogoTitolo:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Annullare la richiesta?"
+                        Size: =16
+                        Color: =colPrimario
+                        FontWeight: =FontWeight.Semibold
+                        Height: =32
+                        FillPortions: =0
+                  - mie_lblDialogoTesto:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="La richiesta " & locCodAnnulla & " passerà allo stato «Annullata» e non potrà più essere modificata. Se era già stata inviata, il coordinatore riceverà un avviso."
+                        Size: =12
+                        Color: =colTesto
+                        Wrap: =true
+                        FillPortions: =1
+                        VerticalAlign: =VerticalAlign.Top
+                        LayoutMinHeight: =60
+                  - mie_txtDialogoNota:
+                      Control: Classic/TextInput@2.3.2
+                      Properties:
+                        Default: |-
+                          =""
+                        HintText: |-
+                          ="Motivazione"
+                        Size: =12
+                        BorderColor: =colBordo
+                        Height: =80
+                        FillPortions: =0
+                        RadiusTopLeft: =4
+                        RadiusTopRight: =4
+                        RadiusBottomLeft: =4
+                        RadiusBottomRight: =4
+                        Mode: =TextMode.MultiLine
+                        Visible: =false
+                  - mie_conDialogoPulsanti:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutJustifyContent: =LayoutJustifyContent.End
+                        LayoutGap: =8
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(0, 0, 0, 0)
+                        Height: =44
+                        FillPortions: =0
+                      Children:
+                        - mie_btnDialogoAnnulla:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              Text: |-
+                                ="Annulla"
+                              OnSelect: |-
+                                =UpdateContext({locDialogo: ""})
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Height: =40
+                              Width: =140
+                              FillPortions: =0
+                              RadiusTopLeft: =6
+                              RadiusTopRight: =6
+                              RadiusBottomLeft: =6
+                              RadiusBottomRight: =6
+                              DisabledFill: =RGBA(200, 200, 200, 1)
+                              DisabledColor: =RGBA(110, 110, 110, 1)
+                              Fill: =Color.White
+                              Color: =colPrimario
+                              HoverFill: =colPrimarioChiaro
+                              PressedFill: =colPrimarioChiaro
+                              HoverColor: =colPrimario
+                              BorderColor: =colPrimario
+                              BorderThickness: =1
+                        - mie_btnDialogoConferma:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              Text: |-
+                                ="Sì, annulla"
+                              OnSelect: |-
+                                =Set(varCaricamento, true);
+                                Set(varMessaggioCaricamento, "Annullamento in corso…");
+                                With(
+                                    {r: IfError(
+                                        SDF_API03_SalvaRichiesta.Run(JSON({id: locIdAnnulla}, JSONFormat.IgnoreBinaryData), "annulla", "", "", "", ""),
+                                        {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                                    )},
+                                    If(
+                                        r.esito = "OK",
+                                        Notify("Richiesta " & locCodAnnulla & " annullata.", NotificationType.Success);
+                                        With(
+                                            {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                            If(
+                                                rm.esito = "OK",
+                                                Set(varJsonMieRichieste, rm.dati);
+                                                Set(varMieCaricate, true),
+                                                Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                                            )
+                                        ),
+                                        Notify(r.messaggio, NotificationType.Error)
+                                    )
+                                );
+                                UpdateContext({locDialogo: ""});
+                                Set(varCaricamento, false)
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Height: =40
+                              Width: =180
+                              FillPortions: =0
+                              RadiusTopLeft: =6
+                              RadiusTopRight: =6
+                              RadiusBottomLeft: =6
+                              RadiusBottomRight: =6
+                              DisabledFill: =RGBA(200, 200, 200, 1)
+                              DisabledColor: =RGBA(110, 110, 110, 1)
+                              Fill: =colErrore
+                              Color: =Color.White
+                              HoverFill: =colPrimarioScuro
+                              PressedFill: =colPrimarioScuro
+                              BorderThickness: =0
+                              DisplayMode: =If(true, DisplayMode.Edit, DisplayMode.Disabled)
+      - mie_conCaricamento:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =varCaricamento
+          Children:
+            - mie_rctCaricamento:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =RGBA(255, 255, 255, 0.65)
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - mie_lblCaricamento:
+                Control: Label@2.5.1
+                Properties:
+                  Text: =Coalesce(varMessaggioCaricamento, "Caricamento in corso…") & Char(10) & "Attendere qualche secondo."
+                  Size: =14
+                  Color: =colPrimario
+                  FontWeight: =FontWeight.Semibold
+                  Align: =Align.Center
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(360, Parent.Width - 32)
+                  Height: =96
+                  Wrap: =true
+                  BorderColor: =colBordo
+                  BorderThickness: =1

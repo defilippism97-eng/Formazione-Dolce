@@ -1,0 +1,1727 @@
+# =============================================================================
+#  Gestione ore formazione – Società Dolce · schermata scrValidazioneHR
+#  6 – Validazione HR singola e per perimetro (HR / Amministratore)
+# -----------------------------------------------------------------------------
+#  Formato: sorgente YAML di Power Apps Studio (Copia codice / Incolla codice).
+#  Come incollarla: vedere powerapps/README.md. Le formule sono in notazione
+#  inglese (separatore "," e concatenazione ";"): Studio in italiano le mostra
+#  con ";" e ";;" automaticamente.
+#  Dati: lettura diretta delegabile di 'Richieste formazione' (HR); scritture solo con SDF_API07_EsitoHR.
+# =============================================================================
+Screens:
+  scrValidazioneHR:
+    Properties:
+      Fill: =colSfondo
+      OnVisible: |-
+        =Set(varMenuAperto, false);
+        UpdateContext({locDialogo: "", locAzione: "", locEsito: ""});
+        Clear(colSelezioneHR);
+        Clear(colDaElaborareHR);
+        Refresh('Richieste formazione')
+    Children:
+      - val_conRadice:
+          Control: GroupContainer@1.3.0
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutJustifyContent: =LayoutJustifyContent.Start
+            LayoutGap: =0
+            DropShadow: =DropShadow.None
+            Fill: =colSfondo
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+          Children:
+            - val_conHeader:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.None
+                  Fill: =colPrimario
+                  Height: =56
+                  FillPortions: =0
+                  PaddingLeft: =12
+                  PaddingRight: =16
+                Children:
+                  - val_icoMenu:
+                      Control: Classic/Icon@2.5.0
+                      Properties:
+                        Icon: =Icon.Hamburger
+                        OnSelect: =Set(varMenuAperto, !varMenuAperto)
+                        Color: =Color.White
+                        Tooltip: |-
+                          ="Apri o chiudi il menu"
+                        Width: =40
+                        Height: =40
+                        PaddingTop: =4
+                        PaddingBottom: =4
+                        PaddingLeft: =4
+                        PaddingRight: =4
+                        FillPortions: =0
+                        Visible: =isMobile
+                  - val_lblTitoloApp:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Gestione ore formazione"
+                        Size: =16
+                        Color: =Color.White
+                        FontWeight: =FontWeight.Semibold
+                        FillPortions: =1
+                        Height: =40
+                        LayoutMinWidth: =150
+                  - val_lblUtente:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =User().FullName & If(haRuolo, " · " & ruoloApp, "")
+                        Size: =11
+                        Color: =Color.White
+                        Align: =Align.Right
+                        Width: =340
+                        Height: =40
+                        FillPortions: =0
+                        Visible: =!isMobile
+            - val_conCorpo:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =0
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(0, 0, 0, 0)
+                  FillPortions: =1
+                Children:
+                  - val_conMenu:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =0
+                        DropShadow: =DropShadow.None
+                        Fill: =colSuperficie
+                        Width: =If(isMobile, Parent.Width, 230)
+                        FillPortions: =0
+                        Visible: =!isMobile || varMenuAperto
+                        BorderColor: =colBordo
+                        BorderThickness: =1
+                        PaddingTop: =8
+                      Children:
+                        - val_lblMenuUtente:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: =User().FullName & Char(10) & ruoloApp
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Visible: =isMobile
+                              Height: =48
+                              FillPortions: =0
+                              PaddingLeft: =12
+                              Wrap: =true
+                        - val_galMenu:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =tblMenu
+                              TemplateSize: =48
+                              TemplatePadding: =0
+                              ShowScrollbar: =false
+                              BorderColor: =colBordo
+                              BorderThickness: =0
+                              Fill: =RGBA(0, 0, 0, 0)
+                              TemplateFill: =If(ThisItem.Chiave = "validazione", colPrimarioChiaro, RGBA(0, 0, 0, 0))
+                              OnSelect: |-
+                                =Set(varMenuAperto, false);
+                                Switch(
+                                    ThisItem.Chiave,
+                                    "home", Navigate(scrHome, ScreenTransition.None),
+                                    "mie", Navigate(scrMieRichieste, ScreenTransition.None),
+                                    "nuova", Set(varIdModifica, 0); Navigate(scrRichiesta, ScreenTransition.None),
+                                    "team", Navigate(scrTeam, ScreenTransition.None),
+                                    "validazione", Navigate(scrValidazioneHR, ScreenTransition.None),
+                                    "riepilogo", Navigate(scrRiepilogo, ScreenTransition.None),
+                                    "chiusura", Navigate(scrChiusura, ScreenTransition.None),
+                                    "admin", Navigate(scrAdmin, ScreenTransition.None),
+                                    "profilo", Navigate(scrProfilo, ScreenTransition.None)
+                                )
+                              DisplayMode: =If(false, DisplayMode.Disabled, DisplayMode.Edit)
+                              FillPortions: =1
+                            Children:
+                              - val_icoVoceMenu:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =ThisItem.Icona
+                                    OnSelect: =Select(Parent)
+                                    Color: =If(ThisItem.Chiave = "validazione", colPrimario, colTestoSecondario)
+                                    Tooltip: |-
+                                      =""
+                                    Width: =28
+                                    Height: =28
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =12
+                                    Y: =(Parent.TemplateHeight - Self.Height) / 2
+                              - val_lblVoceMenu:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Voce
+                                    Size: =12
+                                    Color: =If(ThisItem.Chiave = "validazione", colPrimario, colTesto)
+                                    FontWeight: =If(ThisItem.Chiave = "validazione", FontWeight.Semibold, FontWeight.Normal)
+                                    X: =48
+                                    Y: =0
+                                    Width: =Parent.TemplateWidth - 56
+                                    Height: =Parent.TemplateHeight
+                                    OnSelect: =Select(Parent)
+                              - val_rctVoceAttiva:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colPrimario
+                                    Height: =Parent.TemplateHeight
+                                    X: =0
+                                    Y: =0
+                                    Width: =4
+                                    Visible: =ThisItem.Chiave = "validazione"
+                  - val_conContenuto:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =12
+                        DropShadow: =DropShadow.None
+                        Fill: =colSfondo
+                        FillPortions: =1
+                        Visible: =!isMobile || !varMenuAperto
+                        PaddingTop: =16
+                        PaddingBottom: =16
+                        PaddingLeft: =If(isMobile, 12, 24)
+                        PaddingRight: =If(isMobile, 12, 24)
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                      Children:
+                        - val_lblTitolo:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Validazione HR"
+                              Size: =18
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =36
+                              FillPortions: =0
+                        - val_lblInfo:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Richieste approvate dai coordinatori e in attesa di validazione. Puoi correggere le ore HR riga per riga (la riga viene selezionata) e validare, respingere o chiedere un’integrazione per le righe selezionate o per un intero perimetro. Le icone segnalano possibili duplicati, attestati mancanti e anomalie."
+                              Size: =11
+                              Color: =colTestoSecondario
+                              AutoHeight: =true
+                              Wrap: =true
+                              FillPortions: =0
+                              Height: =20
+                        - val_conFiltri:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + val_lblSezFiltri.Height + 8 + val_rigaFiltri1.Height + 8 + val_rigaFiltri2.Height + 8 + val_conPulisci.Height + 8
+                            Children:
+                              - val_lblSezFiltri:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Filtri"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - val_rigaFiltri1:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76 + 76, 64)
+                                  Children:
+                                    - val_conCampoAnno:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - val_lblCampoAnno:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Anno"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - val_ddAnno:
+                                              Control: Classic/DropDown@2.3.1
+                                              Properties:
+                                                Items: =tblAnniFiltro
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                ChevronBackground: =colPrimario
+                                                ChevronFill: =Color.White
+                                                Default: =Text(Year(Today()))
+                                    - val_conCampoMese:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - val_lblCampoMese:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Mese"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - val_ddMese:
+                                              Control: Classic/DropDown@2.3.1
+                                              Properties:
+                                                Items: =tblMesiFiltro
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                ChevronBackground: =colPrimario
+                                                ChevronFill: =Color.White
+                                                Default: |-
+                                                  ="Tutti i mesi"
+                                    - val_conCampoArea:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - val_lblCampoArea:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Area (vuoto = tutte)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - val_ddArea:
+                                              Control: Classic/DropDown@2.3.1
+                                              Properties:
+                                                Items: =Choices('Richieste formazione'.Area)
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                ChevronBackground: =colPrimario
+                                                ChevronFill: =Color.White
+                                                Default: |-
+                                                  =""
+                                                AllowEmptySelection: =true
+                                    - val_conCampoServizio:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - val_lblCampoServizio:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Servizio (inizia con)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - val_txtServizio:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: |-
+                                                  =""
+                                                HintText: |-
+                                                  ="Es. Nido"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                DelayOutput: =true
+                              - val_rigaFiltri2:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76 + 76, 64)
+                                  Children:
+                                    - val_conCampoCdc:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - val_lblCampoCdc:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Centro di costo (inizia con)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - val_txtCdc:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: |-
+                                                  =""
+                                                HintText: |-
+                                                  ="Es. CEN-"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                DelayOutput: =true
+                                    - val_conCampoCoord:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - val_lblCampoCoord:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Coordinatore (login o nome)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - val_txtCoord:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: |-
+                                                  =""
+                                                HintText: |-
+                                                  ="Es. anna.bianchi"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                DelayOutput: =true
+                                    - val_conCampoLavoratore:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - val_lblCampoLavoratore:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Lavoratore (cognome o login)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - val_txtLavoratore:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: |-
+                                                  =""
+                                                HintText: |-
+                                                  ="Es. Rossi"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                DelayOutput: =true
+                                    - val_conCampoCodice:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - val_lblCampoCodice:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Codice corso (inizia con)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - val_txtCodice:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: |-
+                                                  =""
+                                                HintText: |-
+                                                  ="Es. EXT-"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                DelayOutput: =true
+                              - val_conPulisci:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Horizontal
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =8
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    Height: =40
+                                    FillPortions: =0
+                                  Children:
+                                    - val_btnPulisci:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Pulisci filtri"
+                                          OnSelect: |-
+                                            =Reset(val_ddAnno);
+                                            Reset(val_ddMese);
+                                            Reset(val_ddArea);
+                                            Reset(val_txtServizio);
+                                            Reset(val_txtCdc);
+                                            Reset(val_txtCoord);
+                                            Reset(val_txtLavoratore);
+                                            Reset(val_txtCodice)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          Width: =150
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =Color.White
+                                          Color: =colPrimario
+                                          HoverFill: =colPrimarioChiaro
+                                          PressedFill: =colPrimarioChiaro
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =1
+                                    - val_lblConteggio:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Richieste in elenco: " & CountRows(val_galRichieste.AllItems) & If(CountRows(val_galRichieste.AllItems) >= 100, " (scorri per caricarne altre)", "")
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          FillPortions: =1
+                                          Height: =36
+                        - val_conAzioni:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + val_lblSezAzioni.Height + 8 + val_rigaAmbito.Height + 8 + val_conCampoNota.Height + 8 + val_conPulsanti.Height + 8
+                            Children:
+                              - val_lblSezAzioni:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Azioni su più richieste"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - val_rigaAmbito:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + If(val_conCampoTipoPerimetro.Visible, 76, 0) + If(val_conCampoValorePerimetro.Visible, 76, 0), 64)
+                                  Children:
+                                    - val_conCampoAmbito:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - val_lblCampoAmbito:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Applica a"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - val_ddAmbito:
+                                              Control: Classic/DropDown@2.3.1
+                                              Properties:
+                                                Items: =["Righe selezionate", "Intero perimetro"]
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                ChevronBackground: =colPrimario
+                                                ChevronFill: =Color.White
+                                                Default: |-
+                                                  ="Righe selezionate"
+                                    - val_conCampoTipoPerimetro:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                          Visible: =val_ddAmbito.Selected.Value = "Intero perimetro"
+                                        Children:
+                                          - val_lblCampoTipoPerimetro:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Perimetro"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - val_ddTipoPerimetro:
+                                              Control: Classic/DropDown@2.3.1
+                                              Properties:
+                                                Items: =["Coordinatore", "Centro di costo", "Servizio", "Area", "Tutte le richieste filtrate"]
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                ChevronBackground: =colPrimario
+                                                ChevronFill: =Color.White
+                                                Default: |-
+                                                  ="Centro di costo"
+                                    - val_conCampoValorePerimetro:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =2
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                          Visible: =val_ddAmbito.Selected.Value = "Intero perimetro" && val_ddTipoPerimetro.Selected.Value <> "Tutte le richieste filtrate"
+                                        Children:
+                                          - val_lblCampoValorePerimetro:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Valore del perimetro (tra le richieste filtrate)"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - val_ddValorePerimetro:
+                                              Control: Classic/DropDown@2.3.1
+                                              Properties:
+                                                Items: |-
+                                                  =Switch(
+                                                      val_ddTipoPerimetro.Selected.Value,
+                                                      "Coordinatore", Sort(Distinct(Filter(
+                                                      'Richieste formazione',
+                                                      'Stato richiesta'.Value = "In attesa di validazione HR",
+                                                      val_ddAnno.Selected.Num = 0 || 'Anno di competenza' = val_ddAnno.Selected.Num,
+                                                      val_ddMese.Selected.Num = 0 || 'Mese di competenza' = val_ddMese.Selected.Num,
+                                                      IsBlank(val_ddArea.Selected.Value) || Area.Value = val_ddArea.Selected.Value,
+                                                      IsBlank(val_txtServizio.Text) || StartsWith(Servizio, val_txtServizio.Text),
+                                                      IsBlank(val_txtCdc.Text) || StartsWith('Centro di costo', val_txtCdc.Text),
+                                                      IsBlank(val_txtCoord.Text) || StartsWith('Login coordinatore', Lower(Trim(val_txtCoord.Text))) || StartsWith(Coordinatore, val_txtCoord.Text),
+                                                      IsBlank(val_txtLavoratore.Text) || StartsWith(Cognome, val_txtLavoratore.Text) || StartsWith('Login lavoratore', Lower(Trim(val_txtLavoratore.Text))),
+                                                      IsBlank(val_txtCodice.Text) || StartsWith('Codice univoco corso', val_txtCodice.Text)
+                                                  ), 'Login coordinatore'), Value),
+                                                      "Centro di costo", Sort(Distinct(Filter(
+                                                      'Richieste formazione',
+                                                      'Stato richiesta'.Value = "In attesa di validazione HR",
+                                                      val_ddAnno.Selected.Num = 0 || 'Anno di competenza' = val_ddAnno.Selected.Num,
+                                                      val_ddMese.Selected.Num = 0 || 'Mese di competenza' = val_ddMese.Selected.Num,
+                                                      IsBlank(val_ddArea.Selected.Value) || Area.Value = val_ddArea.Selected.Value,
+                                                      IsBlank(val_txtServizio.Text) || StartsWith(Servizio, val_txtServizio.Text),
+                                                      IsBlank(val_txtCdc.Text) || StartsWith('Centro di costo', val_txtCdc.Text),
+                                                      IsBlank(val_txtCoord.Text) || StartsWith('Login coordinatore', Lower(Trim(val_txtCoord.Text))) || StartsWith(Coordinatore, val_txtCoord.Text),
+                                                      IsBlank(val_txtLavoratore.Text) || StartsWith(Cognome, val_txtLavoratore.Text) || StartsWith('Login lavoratore', Lower(Trim(val_txtLavoratore.Text))),
+                                                      IsBlank(val_txtCodice.Text) || StartsWith('Codice univoco corso', val_txtCodice.Text)
+                                                  ), 'Centro di costo'), Value),
+                                                      "Servizio", Sort(Distinct(Filter(
+                                                      'Richieste formazione',
+                                                      'Stato richiesta'.Value = "In attesa di validazione HR",
+                                                      val_ddAnno.Selected.Num = 0 || 'Anno di competenza' = val_ddAnno.Selected.Num,
+                                                      val_ddMese.Selected.Num = 0 || 'Mese di competenza' = val_ddMese.Selected.Num,
+                                                      IsBlank(val_ddArea.Selected.Value) || Area.Value = val_ddArea.Selected.Value,
+                                                      IsBlank(val_txtServizio.Text) || StartsWith(Servizio, val_txtServizio.Text),
+                                                      IsBlank(val_txtCdc.Text) || StartsWith('Centro di costo', val_txtCdc.Text),
+                                                      IsBlank(val_txtCoord.Text) || StartsWith('Login coordinatore', Lower(Trim(val_txtCoord.Text))) || StartsWith(Coordinatore, val_txtCoord.Text),
+                                                      IsBlank(val_txtLavoratore.Text) || StartsWith(Cognome, val_txtLavoratore.Text) || StartsWith('Login lavoratore', Lower(Trim(val_txtLavoratore.Text))),
+                                                      IsBlank(val_txtCodice.Text) || StartsWith('Codice univoco corso', val_txtCodice.Text)
+                                                  ), Servizio), Value),
+                                                      Sort(Distinct(Filter(
+                                                      'Richieste formazione',
+                                                      'Stato richiesta'.Value = "In attesa di validazione HR",
+                                                      val_ddAnno.Selected.Num = 0 || 'Anno di competenza' = val_ddAnno.Selected.Num,
+                                                      val_ddMese.Selected.Num = 0 || 'Mese di competenza' = val_ddMese.Selected.Num,
+                                                      IsBlank(val_ddArea.Selected.Value) || Area.Value = val_ddArea.Selected.Value,
+                                                      IsBlank(val_txtServizio.Text) || StartsWith(Servizio, val_txtServizio.Text),
+                                                      IsBlank(val_txtCdc.Text) || StartsWith('Centro di costo', val_txtCdc.Text),
+                                                      IsBlank(val_txtCoord.Text) || StartsWith('Login coordinatore', Lower(Trim(val_txtCoord.Text))) || StartsWith(Coordinatore, val_txtCoord.Text),
+                                                      IsBlank(val_txtLavoratore.Text) || StartsWith(Cognome, val_txtLavoratore.Text) || StartsWith('Login lavoratore', Lower(Trim(val_txtLavoratore.Text))),
+                                                      IsBlank(val_txtCodice.Text) || StartsWith('Codice univoco corso', val_txtCodice.Text)
+                                                  ), Area.Value), Value)
+                                                  )
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                ChevronBackground: =colPrimario
+                                                ChevronFill: =Color.White
+                                                Default: |-
+                                                  =""
+                                                AllowEmptySelection: =true
+                              - val_conCampoNota:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =84
+                                  Children:
+                                    - val_lblCampoNota:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Nota / motivazione (obbligatoria per respingere o chiedere integrazione)"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - val_txtNota:
+                                        Control: Classic/TextInput@2.3.2
+                                        Properties:
+                                          Default: |-
+                                            =""
+                                          HintText: |-
+                                            ="Motivazione inviata a lavoratore e coordinatore"
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =56
+                                          FillPortions: =0
+                                          RadiusTopLeft: =4
+                                          RadiusTopRight: =4
+                                          RadiusBottomLeft: =4
+                                          RadiusBottomRight: =4
+                                          Mode: =TextMode.MultiLine
+                              - val_conPulsanti:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Horizontal
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =8
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    LayoutWrap: =true
+                                    Height: =If(isMobile, 4 * 48, If(App.Width < 1300, 96, 48))
+                                    FillPortions: =0
+                                  Children:
+                                    - val_btnValida:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="✔ Valida"
+                                          OnSelect: |-
+                                            =UpdateContext({locAzione: "valida"}); Select(val_btnPrepara)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =140
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colSuccesso
+                                          Color: =Color.White
+                                          HoverFill: =ColorFade(colSuccesso, -15%)
+                                          PressedFill: =ColorFade(colSuccesso, -25%)
+                                          BorderThickness: =0
+                                    - val_btnRespingi:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="✖ Respingi"
+                                          OnSelect: |-
+                                            =UpdateContext({locAzione: "respingi"}); Select(val_btnPrepara)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =140
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colErrore
+                                          Color: =Color.White
+                                          HoverFill: =ColorFade(colErrore, -15%)
+                                          PressedFill: =ColorFade(colErrore, -25%)
+                                          BorderThickness: =0
+                                          DisplayMode: =If(IsBlank(Trim(val_txtNota.Text)), DisplayMode.Disabled, DisplayMode.Edit)
+                                    - val_btnIntegrazione:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Richiedi integrazione"
+                                          OnSelect: |-
+                                            =UpdateContext({locAzione: "integrazione"}); Select(val_btnPrepara)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =200
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colAvviso
+                                          Color: =Color.White
+                                          HoverFill: =ColorFade(colAvviso, -15%)
+                                          PressedFill: =ColorFade(colAvviso, -25%)
+                                          BorderThickness: =0
+                                          DisplayMode: =If(IsBlank(Trim(val_txtNota.Text)), DisplayMode.Disabled, DisplayMode.Edit)
+                                    - val_btnSelTutte:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Seleziona le righe caricate"
+                                          OnSelect: |-
+                                            =ForAll(
+                                                val_galRichieste.AllItems As g,
+                                                If(
+                                                    !(g.ID in colSelezioneHR.id),
+                                                    Collect(colSelezioneHR, {id: g.ID, idRichiesta: g.'ID richiesta', oreRetribuite: -1, oreGettone: -1})
+                                                )
+                                            )
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =230
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =Color.White
+                                          Color: =colPrimario
+                                          HoverFill: =colPrimarioChiaro
+                                          PressedFill: =colPrimarioChiaro
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =1
+                                          Visible: =val_ddAmbito.Selected.Value = "Righe selezionate"
+                                    - val_btnDeseleziona:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Deseleziona"
+                                          OnSelect: =Clear(colSelezioneHR)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =140
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =Color.White
+                                          Color: =colPrimario
+                                          HoverFill: =colPrimarioChiaro
+                                          PressedFill: =colPrimarioChiaro
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =1
+                                          Visible: =val_ddAmbito.Selected.Value = "Righe selezionate"
+                                    - val_lblSelezionate:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Selezionate: " & CountRows(colSelezioneHR)
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          Width: =150
+                                          Height: =40
+                                          Visible: =val_ddAmbito.Selected.Value = "Righe selezionate"
+                        - val_lblEsito:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: =locEsito
+                              Size: =12
+                              Color: =colTesto
+                              Fill: =RGBA(0, 120, 212, 0.08)
+                              BorderColor: =colInfo
+                              BorderThickness: =1
+                              PaddingLeft: =12
+                              PaddingTop: =8
+                              PaddingBottom: =8
+                              AutoHeight: =true
+                              Wrap: =true
+                              Height: =40
+                              FillPortions: =0
+                              Visible: =!IsBlank(locEsito)
+                        - val_conIntRichieste:
+                            Control: GroupContainer@1.3.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =colPrimarioChiaro
+                              Height: =34
+                              FillPortions: =0
+                              Visible: =!isMobile
+                            Children:
+                              - val_lblIntSel:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Sel."
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =4
+                                    Y: =0
+                                    Width: =36
+                                    Height: =Parent.Height
+                              - val_lblIntLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Lavoratore / ID"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =40
+                                    Y: =0
+                                    Width: =(Parent.Width - 56 - 330) * 0.22
+                                    Height: =Parent.Height
+                              - val_lblIntCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Corso / codice / data"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =40 + (Parent.Width - 56 - 330) * 0.22
+                                    Y: =0
+                                    Width: =(Parent.Width - 56 - 330) * 0.34
+                                    Height: =Parent.Height
+                              - val_lblIntOrg:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Coordinatore / centro di costo"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =40 + (Parent.Width - 56 - 330) * 0.56
+                                    Y: =0
+                                    Width: =(Parent.Width - 56 - 330) * 0.26
+                                    Height: =Parent.Height
+                              - val_lblIntOre:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Ore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =40 + (Parent.Width - 56 - 330) * 0.82
+                                    Y: =0
+                                    Width: =(Parent.Width - 56 - 330) * 0.18
+                                    Height: =Parent.Height
+                              - val_lblIntOreHR:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Ore HR retr. / gett."
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =Parent.Width - 16 - 330
+                                    Y: =0
+                                    Width: =150
+                                    Height: =Parent.Height
+                              - val_lblIntSegnali:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Segnali"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =Parent.Width - 16 - 180
+                                    Y: =0
+                                    Width: =180
+                                    Height: =Parent.Height
+                        - val_galRichieste:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: |-
+                                =Sort(Filter(
+                                    'Richieste formazione',
+                                    'Stato richiesta'.Value = "In attesa di validazione HR",
+                                    val_ddAnno.Selected.Num = 0 || 'Anno di competenza' = val_ddAnno.Selected.Num,
+                                    val_ddMese.Selected.Num = 0 || 'Mese di competenza' = val_ddMese.Selected.Num,
+                                    IsBlank(val_ddArea.Selected.Value) || Area.Value = val_ddArea.Selected.Value,
+                                    IsBlank(val_txtServizio.Text) || StartsWith(Servizio, val_txtServizio.Text),
+                                    IsBlank(val_txtCdc.Text) || StartsWith('Centro di costo', val_txtCdc.Text),
+                                    IsBlank(val_txtCoord.Text) || StartsWith('Login coordinatore', Lower(Trim(val_txtCoord.Text))) || StartsWith(Coordinatore, val_txtCoord.Text),
+                                    IsBlank(val_txtLavoratore.Text) || StartsWith(Cognome, val_txtLavoratore.Text) || StartsWith('Login lavoratore', Lower(Trim(val_txtLavoratore.Text))),
+                                    IsBlank(val_txtCodice.Text) || StartsWith('Codice univoco corso', val_txtCodice.Text)
+                                ), 'Data sessione formativa', SortOrder.Descending)
+                              TemplateSize: =If(isMobile, 132, 60)
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =Set(varIdDettaglio, ThisItem.ID); Set(varDaLinkDiretto, false); Navigate(scrDettaglio, ScreenTransition.None)
+                              FillPortions: =1
+                              LayoutMinHeight: =360
+                            Children:
+                              - val_chkSel:
+                                  Control: Classic/CheckBox@2.1.0
+                                  Properties:
+                                    Text: |-
+                                      =""
+                                    Default: =ThisItem.ID in colSelezioneHR.id
+                                    Size: =12
+                                    Color: =colTesto
+                                    CheckmarkFill: =Color.White
+                                    CheckboxBackgroundFill: =Color.White
+                                    CheckboxBorderColor: =colPrimario
+                                    Height: =36
+                                    OnCheck: |-
+                                      =// selezione della riga con eventuali ore HR modificate (-1 = usa le ore del coordinatore)
+                                      RemoveIf(colSelezioneHR, id = ThisItem.ID);
+                                      Collect(
+                                          colSelezioneHR,
+                                          {
+                                              id: ThisItem.ID,
+                                              idRichiesta: ThisItem.'ID richiesta',
+                                              oreRetribuite: If(Coalesce(Value(val_txtRigaOreRet.Text), 0) = Coalesce(ThisItem.'Ore retribuite riconosciute coordinatore', 0), -1, Coalesce(Value(val_txtRigaOreRet.Text), 0)),
+                                              oreGettone: If(Coalesce(Value(val_txtRigaOreGet.Text), 0) = Coalesce(ThisItem.'Ore gettone riconosciute coordinatore', 0), -1, Coalesce(Value(val_txtRigaOreGet.Text), 0))
+                                          }
+                                      )
+                                    OnUncheck: =RemoveIf(colSelezioneHR, id = ThisItem.ID)
+                                    X: =4
+                                    Y: =If(isMobile, 4, 8)
+                                    Width: =36
+                                    Tooltip: |-
+                                      ="Seleziona la richiesta"
+                              - val_lblRigaLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Cognome & " " & ThisItem.Nome & Char(10) & ThisItem.'ID richiesta'
+                                    Size: =11
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =40
+                                    Y: =0
+                                    Width: =If(isMobile, Parent.TemplateWidth - 48, (Parent.TemplateWidth - 40 - 330) * 0.22)
+                                    Height: =If(isMobile, 44, Parent.TemplateHeight)
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - val_lblRigaCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Coalesce(ThisItem.'Titolo del corso a catalogo', ThisItem.'Titolo corso libero') & Char(10) & ThisItem.'Codice univoco corso' & " · " & Text(ThisItem.'Data sessione formativa', "dd/mm/yyyy")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =If(isMobile, 40, 40 + (Parent.TemplateWidth - 40 - 330) * 0.22)
+                                    Y: =If(isMobile, 44, 0)
+                                    Width: =If(isMobile, Parent.TemplateWidth - 48, (Parent.TemplateWidth - 40 - 330) * 0.34)
+                                    Height: =If(isMobile, 40, Parent.TemplateHeight)
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - val_lblRigaOrg:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Coordinatore & Char(10) & ThisItem.'Centro di costo' & " · " & ThisItem.Servizio
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    X: =40 + (Parent.TemplateWidth - 40 - 330) * 0.56
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 40 - 330) * 0.26
+                                    Height: =Parent.TemplateHeight
+                                    Wrap: =true
+                                    Visible: =!isMobile
+                                    OnSelect: =Select(Parent)
+                              - val_lblRigaOre:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Freq. " & Text(ThisItem.'Ore frequentate dichiarate', "[$-en-US]0.##") & Char(10) & "Coord. " & Text(ThisItem.'Ore retribuite riconosciute coordinatore', "[$-en-US]0.##") & " + " & Text(ThisItem.'Ore gettone riconosciute coordinatore', "[$-en-US]0.##")
+                                    Size: =10
+                                    Color: =colTesto
+                                    X: =If(isMobile, 40, 40 + (Parent.TemplateWidth - 40 - 330) * 0.82)
+                                    Y: =If(isMobile, 84, 0)
+                                    Width: =If(isMobile, 110, (Parent.TemplateWidth - 40 - 330) * 0.18)
+                                    Height: =If(isMobile, 44, Parent.TemplateHeight)
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - val_txtRigaOreRet:
+                                  Control: Classic/TextInput@2.3.2
+                                  Properties:
+                                    Default: =ThisItem.'Ore retribuite riconosciute coordinatore'
+                                    HintText: |-
+                                      ="Retr."
+                                    Size: =12
+                                    BorderColor: =If(Coalesce(Value(val_txtRigaOreRet.Text), 0) + Coalesce(Value(val_txtRigaOreGet.Text), 0) > Coalesce(ThisItem.'Ore frequentate dichiarate', 0) || Coalesce(Value(val_txtRigaOreRet.Text), 0) < 0 || Coalesce(Value(val_txtRigaOreGet.Text), 0) < 0, colErrore, colBordo)
+                                    Height: =34
+                                    RadiusTopLeft: =4
+                                    RadiusTopRight: =4
+                                    RadiusBottomLeft: =4
+                                    RadiusBottomRight: =4
+                                    Format: =TextFormat.Number
+                                    OnChange: |-
+                                      =// selezione della riga con eventuali ore HR modificate (-1 = usa le ore del coordinatore)
+                                      RemoveIf(colSelezioneHR, id = ThisItem.ID);
+                                      Collect(
+                                          colSelezioneHR,
+                                          {
+                                              id: ThisItem.ID,
+                                              idRichiesta: ThisItem.'ID richiesta',
+                                              oreRetribuite: If(Coalesce(Value(val_txtRigaOreRet.Text), 0) = Coalesce(ThisItem.'Ore retribuite riconosciute coordinatore', 0), -1, Coalesce(Value(val_txtRigaOreRet.Text), 0)),
+                                              oreGettone: If(Coalesce(Value(val_txtRigaOreGet.Text), 0) = Coalesce(ThisItem.'Ore gettone riconosciute coordinatore', 0), -1, Coalesce(Value(val_txtRigaOreGet.Text), 0))
+                                          }
+                                      )
+                                    X: =If(isMobile, 156, Parent.TemplateWidth - 330)
+                                    Y: =If(isMobile, 90, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Width: =70
+                                    Tooltip: |-
+                                      ="Ore retribuite approvate HR"
+                              - val_txtRigaOreGet:
+                                  Control: Classic/TextInput@2.3.2
+                                  Properties:
+                                    Default: =ThisItem.'Ore gettone riconosciute coordinatore'
+                                    HintText: |-
+                                      ="Gett."
+                                    Size: =12
+                                    BorderColor: =If(Coalesce(Value(val_txtRigaOreRet.Text), 0) + Coalesce(Value(val_txtRigaOreGet.Text), 0) > Coalesce(ThisItem.'Ore frequentate dichiarate', 0) || Coalesce(Value(val_txtRigaOreRet.Text), 0) < 0 || Coalesce(Value(val_txtRigaOreGet.Text), 0) < 0, colErrore, colBordo)
+                                    Height: =34
+                                    RadiusTopLeft: =4
+                                    RadiusTopRight: =4
+                                    RadiusBottomLeft: =4
+                                    RadiusBottomRight: =4
+                                    Format: =TextFormat.Number
+                                    OnChange: |-
+                                      =// selezione della riga con eventuali ore HR modificate (-1 = usa le ore del coordinatore)
+                                      RemoveIf(colSelezioneHR, id = ThisItem.ID);
+                                      Collect(
+                                          colSelezioneHR,
+                                          {
+                                              id: ThisItem.ID,
+                                              idRichiesta: ThisItem.'ID richiesta',
+                                              oreRetribuite: If(Coalesce(Value(val_txtRigaOreRet.Text), 0) = Coalesce(ThisItem.'Ore retribuite riconosciute coordinatore', 0), -1, Coalesce(Value(val_txtRigaOreRet.Text), 0)),
+                                              oreGettone: If(Coalesce(Value(val_txtRigaOreGet.Text), 0) = Coalesce(ThisItem.'Ore gettone riconosciute coordinatore', 0), -1, Coalesce(Value(val_txtRigaOreGet.Text), 0))
+                                          }
+                                      )
+                                    X: =If(isMobile, 230, Parent.TemplateWidth - 256)
+                                    Y: =If(isMobile, 90, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Width: =70
+                                    Tooltip: |-
+                                      ="Ore gettone approvate HR"
+                              - val_icoDuplicato:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.Warning
+                                    OnSelect: =Select(Parent)
+                                    Color: =colAvviso
+                                    Tooltip: |-
+                                      ="Possibile duplicato (stesso lavoratore, corso e data)"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =Parent.TemplateWidth - 180
+                                    Y: =If(isMobile, 8, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Visible: =ThisItem.'Possibile duplicato'
+                              - val_icoSenzaAttestato:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.Document
+                                    OnSelect: =Select(Parent)
+                                    Color: =colErrore
+                                    Tooltip: |-
+                                      ="Attestato mancante"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =Parent.TemplateWidth - 144
+                                    Y: =If(isMobile, 8, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Visible: =!ThisItem.'Attestato presente'
+                              - val_icoAnomalie:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.Information
+                                    OnSelect: =Select(Parent)
+                                    Color: =colAvviso
+                                    Tooltip: |-
+                                      ="Anomalie: " & ThisItem.'Anomalie rilevate'
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =Parent.TemplateWidth - 108
+                                    Y: =If(isMobile, 8, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Visible: =!IsBlank(ThisItem.'Anomalie rilevate')
+                              - val_icoR4:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.CancelBadge
+                                    OnSelect: =Select(Parent)
+                                    Color: =colErrore
+                                    Tooltip: |-
+                                      ="R4: ore HR superiori alle ore frequentate o negative"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =Parent.TemplateWidth - 72
+                                    Y: =If(isMobile, 8, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Visible: =Coalesce(Value(val_txtRigaOreRet.Text), 0) + Coalesce(Value(val_txtRigaOreGet.Text), 0) > Coalesce(ThisItem.'Ore frequentate dichiarate', 0) || Coalesce(Value(val_txtRigaOreRet.Text), 0) < 0 || Coalesce(Value(val_txtRigaOreGet.Text), 0) < 0
+                              - val_icoVedi:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.View
+                                    OnSelect: =Select(Parent)
+                                    Color: =colPrimario
+                                    Tooltip: |-
+                                      ="Apri il dettaglio e lo storico"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =Parent.TemplateWidth - 36
+                                    Y: =If(isMobile, Parent.TemplateHeight - 40, (Parent.TemplateHeight - Self.Height) / 2)
+                              - val_rctRigaSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+                        - val_lblVuoto:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Nessuna richiesta in attesa di validazione con i filtri scelti."
+                              Size: =12
+                              Color: =colTestoSecondario
+                              Height: =32
+                              FillPortions: =0
+                              Visible: =CountRows(val_galRichieste.AllItems) = 0
+      - val_btnPrepara:
+          Control: Classic/Button@2.2.0
+          Properties:
+            Text: |-
+              ="(procedura)"
+            OnSelect: |-
+              =If(
+                  locAzione <> "valida" && IsBlank(Trim(val_txtNota.Text)),
+                  Notify("Per respingere o chiedere un’integrazione la motivazione è obbligatoria.", NotificationType.Error),
+                  val_ddAmbito.Selected.Value = "Intero perimetro" && val_ddTipoPerimetro.Selected.Value <> "Tutte le richieste filtrate" && IsBlank(val_ddValorePerimetro.Selected.Value),
+                  Notify("Scegli il valore del perimetro (es. il centro di costo).", NotificationType.Error),
+                  If(
+                      val_ddAmbito.Selected.Value = "Righe selezionate",
+                      ClearCollect(colDaElaborareHR, colSelezioneHR),
+                      // intero perimetro: tutte le richieste che rispettano i filtri e il perimetro scelto (massimo 2000)
+                      ClearCollect(
+                          colDaElaborareHR,
+                          ForAll(
+                              Filter(
+                                  'Richieste formazione',
+                                  'Stato richiesta'.Value = "In attesa di validazione HR",
+                                  val_ddAnno.Selected.Num = 0 || 'Anno di competenza' = val_ddAnno.Selected.Num,
+                                  val_ddMese.Selected.Num = 0 || 'Mese di competenza' = val_ddMese.Selected.Num,
+                                  IsBlank(val_ddArea.Selected.Value) || Area.Value = val_ddArea.Selected.Value,
+                                  IsBlank(val_txtServizio.Text) || StartsWith(Servizio, val_txtServizio.Text),
+                                  IsBlank(val_txtCdc.Text) || StartsWith('Centro di costo', val_txtCdc.Text),
+                                  IsBlank(val_txtCoord.Text) || StartsWith('Login coordinatore', Lower(Trim(val_txtCoord.Text))) || StartsWith(Coordinatore, val_txtCoord.Text),
+                                  IsBlank(val_txtLavoratore.Text) || StartsWith(Cognome, val_txtLavoratore.Text) || StartsWith('Login lavoratore', Lower(Trim(val_txtLavoratore.Text))),
+                                  IsBlank(val_txtCodice.Text) || StartsWith('Codice univoco corso', val_txtCodice.Text),
+                                  val_ddTipoPerimetro.Selected.Value <> "Coordinatore" || 'Login coordinatore' = val_ddValorePerimetro.Selected.Value,
+                                  val_ddTipoPerimetro.Selected.Value <> "Centro di costo" || 'Centro di costo' = val_ddValorePerimetro.Selected.Value,
+                                  val_ddTipoPerimetro.Selected.Value <> "Servizio" || Servizio = val_ddValorePerimetro.Selected.Value,
+                                  val_ddTipoPerimetro.Selected.Value <> "Area" || Area.Value = val_ddValorePerimetro.Selected.Value
+                              ) As x,
+                              {
+                                  id: x.ID,
+                                  idRichiesta: x.'ID richiesta',
+                                  oreRetribuite: Coalesce(LookUp(colSelezioneHR, id = x.ID, oreRetribuite), -1),
+                                  oreGettone: Coalesce(LookUp(colSelezioneHR, id = x.ID, oreGettone), -1)
+                              }
+                          )
+                      )
+                  );
+                  If(
+                      CountRows(colDaElaborareHR) = 0,
+                      Notify("Nessuna richiesta da elaborare: spunta almeno una riga oppure controlla filtri e perimetro.", NotificationType.Warning),
+                      UpdateContext({locDialogo: "conferma"})
+                  )
+              )
+            Size: =12
+            FontWeight: =FontWeight.Semibold
+            Height: =10
+            Width: =10
+            RadiusTopLeft: =6
+            RadiusTopRight: =6
+            RadiusBottomLeft: =6
+            RadiusBottomRight: =6
+            DisabledFill: =RGBA(200, 200, 200, 1)
+            DisabledColor: =RGBA(110, 110, 110, 1)
+            Fill: =colPrimario
+            Color: =Color.White
+            HoverFill: =colPrimarioScuro
+            PressedFill: =colPrimarioScuro
+            BorderThickness: =0
+            Visible: =false
+            X: =0
+            Y: =0
+      - val_conDialogo:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =!IsBlank(locDialogo)
+          Children:
+            - val_rctDialogoVelo:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =colVelo
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - val_conDialogoBox:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.Bold
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(520, Parent.Width - 32)
+                  Height: =If(val_txtDialogoNota.Visible, 380, 290)
+                  PaddingTop: =20
+                  PaddingBottom: =20
+                  PaddingLeft: =20
+                  PaddingRight: =20
+                  RadiusTopLeft: =8
+                  RadiusTopRight: =8
+                  RadiusBottomLeft: =8
+                  RadiusBottomRight: =8
+                Children:
+                  - val_lblDialogoTitolo:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Conferma l’operazione"
+                        Size: =16
+                        Color: =colPrimario
+                        FontWeight: =FontWeight.Semibold
+                        Height: =32
+                        FillPortions: =0
+                  - val_lblDialogoTesto:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Stai per " & Switch(locAzione, "valida", "VALIDARE", "respingi", "RESPINGERE", "chiedere un’INTEGRAZIONE per") & " " &
+                          CountRows(colDaElaborareHR) & " richieste" &
+                          If(
+                              val_ddAmbito.Selected.Value = "Intero perimetro",
+                              " (perimetro: " & val_ddTipoPerimetro.Selected.Value & If(val_ddTipoPerimetro.Selected.Value = "Tutte le richieste filtrate", "", " " & val_ddValorePerimetro.Selected.Value) & ")",
+                              " selezionate"
+                          ) & ". " &
+                          If(locAzione = "valida", "Dove non hai modificato le ore verranno usate quelle riconosciute dal coordinatore. ", "Motivazione: " & Trim(val_txtNota.Text) & ". ") &
+                          If(CountRows(colDaElaborareHR) >= 2000, "Attenzione: si elaborano al massimo 2000 richieste per volta, restringi i filtri. ", "") &
+                          If(CountRows(colDaElaborareHR) > 25, "Oltre 25 richieste l’elaborazione prosegue in background e riceverai un’e-mail con l’esito. ", "") &
+                          "Confermi?"
+                        Size: =12
+                        Color: =colTesto
+                        Wrap: =true
+                        FillPortions: =1
+                        VerticalAlign: =VerticalAlign.Top
+                        LayoutMinHeight: =60
+                  - val_txtDialogoNota:
+                      Control: Classic/TextInput@2.3.2
+                      Properties:
+                        Default: |-
+                          =""
+                        HintText: |-
+                          ="Motivazione"
+                        Size: =12
+                        BorderColor: =colBordo
+                        Height: =80
+                        FillPortions: =0
+                        RadiusTopLeft: =4
+                        RadiusTopRight: =4
+                        RadiusBottomLeft: =4
+                        RadiusBottomRight: =4
+                        Mode: =TextMode.MultiLine
+                        Visible: =false
+                  - val_conDialogoPulsanti:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutJustifyContent: =LayoutJustifyContent.End
+                        LayoutGap: =8
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(0, 0, 0, 0)
+                        Height: =44
+                        FillPortions: =0
+                      Children:
+                        - val_btnDialogoAnnulla:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              Text: |-
+                                ="Annulla"
+                              OnSelect: |-
+                                =UpdateContext({locDialogo: ""})
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Height: =40
+                              Width: =140
+                              FillPortions: =0
+                              RadiusTopLeft: =6
+                              RadiusTopRight: =6
+                              RadiusBottomLeft: =6
+                              RadiusBottomRight: =6
+                              DisabledFill: =RGBA(200, 200, 200, 1)
+                              DisabledColor: =RGBA(110, 110, 110, 1)
+                              Fill: =Color.White
+                              Color: =colPrimario
+                              HoverFill: =colPrimarioChiaro
+                              PressedFill: =colPrimarioChiaro
+                              HoverColor: =colPrimario
+                              BorderColor: =colPrimario
+                              BorderThickness: =1
+                        - val_btnDialogoConferma:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              Text: |-
+                                ="Conferma"
+                              OnSelect: |-
+                                =Set(varCaricamento, true);
+                                Set(varMessaggioCaricamento, "Elaborazione di " & CountRows(colDaElaborareHR) & " richieste…");
+                                With(
+                                    {r: IfError(
+                                        SDF_API07_EsitoHR.Run(
+                                            JSON(
+                                                {
+                                                    azione: locAzione,
+                                                    nota: Trim(val_txtNota.Text),
+                                                    richieste: ForAll(colDaElaborareHR, {id: id, oreRetribuite: oreRetribuite, oreGettone: oreGettone})
+                                                },
+                                                JSONFormat.IgnoreBinaryData
+                                            )
+                                        ),
+                                        {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                                    )},
+                                    If(
+                                        r.esito = "OK",
+                                        With(
+                                            {
+                                                scartate: IfError(
+                                                    Concat(
+                                                        Table(ParseJSON(r.dati).scartate) As s,
+                                                        "• " & Coalesce(LookUp(colDaElaborareHR, id = Value(s.Value.id), idRichiesta), Text(s.Value.id)) & ": " & Text(s.Value.motivo),
+                                                        Char(10)
+                                                    ),
+                                                    ""
+                                                )
+                                            },
+                                            UpdateContext({locEsito: Coalesce(r.messaggio, "Operazione completata.") & If(IsBlank(scartate), "", Char(10) & "Richieste scartate:" & Char(10) & scartate)});
+                                            Notify(Coalesce(r.messaggio, "Operazione completata.") & If(IsBlank(scartate), "", " Alcune richieste sono state scartate: vedi il dettaglio sopra l’elenco."), If(IsBlank(scartate), NotificationType.Success, NotificationType.Warning))
+                                        );
+                                        Clear(colSelezioneHR);
+                                        Clear(colDaElaborareHR);
+                                        Reset(val_txtNota);
+                                        Refresh('Richieste formazione'),
+                                        Notify(r.messaggio, NotificationType.Error)
+                                    )
+                                );
+                                UpdateContext({locDialogo: ""});
+                                Set(varCaricamento, false)
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Height: =40
+                              Width: =180
+                              FillPortions: =0
+                              RadiusTopLeft: =6
+                              RadiusTopRight: =6
+                              RadiusBottomLeft: =6
+                              RadiusBottomRight: =6
+                              DisabledFill: =RGBA(200, 200, 200, 1)
+                              DisabledColor: =RGBA(110, 110, 110, 1)
+                              Fill: =Switch(locAzione, "valida", colSuccesso, "integrazione", colAvviso, colErrore)
+                              Color: =Color.White
+                              HoverFill: =colPrimarioScuro
+                              PressedFill: =colPrimarioScuro
+                              BorderThickness: =0
+                              DisplayMode: =If(true, DisplayMode.Edit, DisplayMode.Disabled)
+      - val_conCaricamento:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =varCaricamento
+          Children:
+            - val_rctCaricamento:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =RGBA(255, 255, 255, 0.65)
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - val_lblCaricamento:
+                Control: Label@2.5.1
+                Properties:
+                  Text: =Coalesce(varMessaggioCaricamento, "Caricamento in corso…") & Char(10) & "Attendere qualche secondo."
+                  Size: =14
+                  Color: =colPrimario
+                  FontWeight: =FontWeight.Semibold
+                  Align: =Align.Center
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(360, Parent.Width - 32)
+                  Height: =96
+                  Wrap: =true
+                  BorderColor: =colBordo
+                  BorderThickness: =1

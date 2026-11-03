@@ -1,0 +1,2160 @@
+# =============================================================================
+#  Gestione ore formazione – Società Dolce · schermata scrRiepilogo
+#  7 – Riepilogo mensile (lavoratore: proprie; coordinatore: gruppo; HR: tutto)
+# -----------------------------------------------------------------------------
+#  Formato: sorgente YAML di Power Apps Studio (Copia codice / Incolla codice).
+#  Come incollarla: vedere powerapps/README.md. Le formule sono in notazione
+#  inglese (separatore "," e concatenazione ";"): Studio in italiano le mostra
+#  con ";" e ";;" automaticamente.
+#  Dati: lavoratore SDF_API02; coordinatore SDF_API05; HR lettura diretta di 'Richieste formazione'.
+# =============================================================================
+Screens:
+  scrRiepilogo:
+    Properties:
+      Fill: =colSfondo
+      OnVisible: |-
+        =Set(varMenuAperto, false);
+        If(
+            IsBlank(LookUp(tblPerimetriRiep, Chiave = varPerimetroRiep)),
+            Set(varPerimetroRiep, If(isHR, "hr", isCoord, "team", "personale"))
+        );
+        Reset(rie_ddPerimetro);
+        Set(varCaricamento, true);
+        Set(varMessaggioCaricamento, "Caricamento del riepilogo…");
+        Switch(
+            varPerimetroRiep,
+            "personale",
+            // lavoratore: le proprie richieste (SDF_API02)
+            If(
+                !varMieCaricate,
+                With(
+                    {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                    If(
+                        rm.esito = "OK",
+                        Set(varJsonMieRichieste, rm.dati);
+                        Set(varMieCaricate, true),
+                        Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                    )
+                )
+            );
+        ClearCollect(
+            colRiepilogo,
+            ForAll(
+                Filter(colMieRichieste, annoCompetenza = rie_ddAnno.Selected.Num, rie_ddMese.Selected.Num = 0 || meseCompetenza = rie_ddMese.Selected.Num) As x,
+                {id: x.id, idRichiesta: x.idRichiesta, lavoratoreLogin: x.lavoratoreLogin, nominativo: x.nominativo, area: x.area, servizio: x.servizio, centroDiCosto: x.centroDiCosto, coordinatoreLogin: x.coordinatoreLogin, coordinatoreNome: x.coordinatoreNome, codiceCorso: x.codiceCorso, titolo: x.titolo, dataSessione: x.dataSessione, oreFrequentate: x.oreFrequentate, oreRetribuiteRichieste: x.oreRetribuiteRichieste, oreGettoneRichieste: x.oreGettoneRichieste, oreRetribuiteCoord: x.oreRetribuiteCoord, oreGettoneCoord: x.oreGettoneCoord, oreRetribuiteHR: x.oreRetribuiteHR, oreGettoneHR: x.oreGettoneHR, stato: x.stato, possibileDuplicato: x.possibileDuplicato, attestatoPresente: x.attestatoPresente}
+            )
+        ),
+        "team",
+        // coordinatore: solo il proprio gruppo (SDF_API05)
+        Set(varAnnoTeam, rie_ddAnno.Selected.Num);
+        Set(varMeseTeam, rie_ddMese.Selected.Num);
+            With(
+                {rt: IfError(SDF_API05_RichiesteTeam.Run(varAnnoTeam, varMeseTeam), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                If(
+                    rt.esito = "OK",
+                    Set(varJsonTeam, rt.dati);
+                    Set(varTeamCaricato, true),
+                    Notify("Non è stato possibile caricare le richieste del team. " & rt.messaggio, NotificationType.Error)
+                )
+            );
+            ClearCollect(colRiepilogo, ForAll(colRichiesteTeam As x, {id: x.id, idRichiesta: x.idRichiesta, lavoratoreLogin: x.lavoratoreLogin, nominativo: x.nominativo, area: x.area, servizio: x.servizio, centroDiCosto: x.centroDiCosto, coordinatoreLogin: x.coordinatoreLogin, coordinatoreNome: x.coordinatoreNome, codiceCorso: x.codiceCorso, titolo: x.titolo, dataSessione: x.dataSessione, oreFrequentate: x.oreFrequentate, oreRetribuiteRichieste: x.oreRetribuiteRichieste, oreGettoneRichieste: x.oreGettoneRichieste, oreRetribuiteCoord: x.oreRetribuiteCoord, oreGettoneCoord: x.oreGettoneCoord, oreRetribuiteHR: x.oreRetribuiteHR, oreGettoneHR: x.oreGettoneHR, stato: x.stato, possibileDuplicato: x.possibileDuplicato, attestatoPresente: x.attestatoPresente})),
+            "hr",
+            // HR / Amministratore: lettura diretta con filtri delegabili su anno e mese, poi stessa forma dei dati
+            ClearCollect(
+                colRiepSP,
+                Filter(
+                    'Richieste formazione',
+                    'Anno di competenza' = rie_ddAnno.Selected.Num,
+                    rie_ddMese.Selected.Num = 0 || 'Mese di competenza' = rie_ddMese.Selected.Num
+                )
+            );
+            ClearCollect(
+                colRiepilogo,
+                ForAll(
+                    colRiepSP As x,
+                    {
+                        id: x.ID,
+                        idRichiesta: x.'ID richiesta',
+                        lavoratoreLogin: Lower(x.'Login lavoratore'),
+                        nominativo: Trim(x.Cognome & " " & x.Nome),
+                        area: x.Area.Value,
+                        servizio: x.Servizio,
+                        centroDiCosto: x.'Centro di costo',
+                        coordinatoreLogin: Lower(x.'Login coordinatore'),
+                        coordinatoreNome: x.Coordinatore,
+                        codiceCorso: x.'Codice univoco corso',
+                        titolo: Coalesce(x.'Titolo del corso a catalogo', x.'Titolo corso libero'),
+                        dataSessione: If(IsBlank(x.'Data sessione formativa'), Blank(), Date(Year(x.'Data sessione formativa'), Month(x.'Data sessione formativa'), Day(x.'Data sessione formativa'))),
+                        oreFrequentate: Coalesce(x.'Ore frequentate dichiarate', 0),
+                        oreRetribuiteRichieste: Coalesce(x.'Ore retribuite richieste', 0),
+                        oreGettoneRichieste: Coalesce(x.'Ore gettone richieste', 0),
+                        oreRetribuiteCoord: Coalesce(x.'Ore retribuite riconosciute coordinatore', 0),
+                        oreGettoneCoord: Coalesce(x.'Ore gettone riconosciute coordinatore', 0),
+                        oreRetribuiteHR: Coalesce(x.'Ore retribuite approvate HR', 0),
+                        oreGettoneHR: Coalesce(x.'Ore gettone approvate HR', 0),
+                        stato: x.'Stato richiesta'.Value,
+                        possibileDuplicato: Coalesce(x.'Possibile duplicato', false),
+                        attestatoPresente: Coalesce(x.'Attestato presente', false)
+                    }
+                )
+            )
+        );Reset(rie_ddArea);
+        Reset(rie_ddServizio);
+        Reset(rie_ddCdc);
+        Reset(rie_ddCoord);
+        Reset(rie_ddLavoratore);
+        Reset(rie_ddStato);
+        ClearCollect(colRiepFiltrato, colRiepilogo);
+        Set(varCaricamento, false)
+    Children:
+      - rie_conRadice:
+          Control: GroupContainer@1.3.0
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutJustifyContent: =LayoutJustifyContent.Start
+            LayoutGap: =0
+            DropShadow: =DropShadow.None
+            Fill: =colSfondo
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+          Children:
+            - rie_conHeader:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.None
+                  Fill: =colPrimario
+                  Height: =56
+                  FillPortions: =0
+                  PaddingLeft: =12
+                  PaddingRight: =16
+                Children:
+                  - rie_icoMenu:
+                      Control: Classic/Icon@2.5.0
+                      Properties:
+                        Icon: =Icon.Hamburger
+                        OnSelect: =Set(varMenuAperto, !varMenuAperto)
+                        Color: =Color.White
+                        Tooltip: |-
+                          ="Apri o chiudi il menu"
+                        Width: =40
+                        Height: =40
+                        PaddingTop: =4
+                        PaddingBottom: =4
+                        PaddingLeft: =4
+                        PaddingRight: =4
+                        FillPortions: =0
+                        Visible: =isMobile
+                  - rie_lblTitoloApp:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Gestione ore formazione"
+                        Size: =16
+                        Color: =Color.White
+                        FontWeight: =FontWeight.Semibold
+                        FillPortions: =1
+                        Height: =40
+                        LayoutMinWidth: =150
+                  - rie_lblUtente:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =User().FullName & If(haRuolo, " · " & ruoloApp, "")
+                        Size: =11
+                        Color: =Color.White
+                        Align: =Align.Right
+                        Width: =340
+                        Height: =40
+                        FillPortions: =0
+                        Visible: =!isMobile
+            - rie_conCorpo:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =0
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(0, 0, 0, 0)
+                  FillPortions: =1
+                Children:
+                  - rie_conMenu:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =0
+                        DropShadow: =DropShadow.None
+                        Fill: =colSuperficie
+                        Width: =If(isMobile, Parent.Width, 230)
+                        FillPortions: =0
+                        Visible: =!isMobile || varMenuAperto
+                        BorderColor: =colBordo
+                        BorderThickness: =1
+                        PaddingTop: =8
+                      Children:
+                        - rie_lblMenuUtente:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: =User().FullName & Char(10) & ruoloApp
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Visible: =isMobile
+                              Height: =48
+                              FillPortions: =0
+                              PaddingLeft: =12
+                              Wrap: =true
+                        - rie_galMenu:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =tblMenu
+                              TemplateSize: =48
+                              TemplatePadding: =0
+                              ShowScrollbar: =false
+                              BorderColor: =colBordo
+                              BorderThickness: =0
+                              Fill: =RGBA(0, 0, 0, 0)
+                              TemplateFill: =If(ThisItem.Chiave = "riepilogo", colPrimarioChiaro, RGBA(0, 0, 0, 0))
+                              OnSelect: |-
+                                =Set(varMenuAperto, false);
+                                Switch(
+                                    ThisItem.Chiave,
+                                    "home", Navigate(scrHome, ScreenTransition.None),
+                                    "mie", Navigate(scrMieRichieste, ScreenTransition.None),
+                                    "nuova", Set(varIdModifica, 0); Navigate(scrRichiesta, ScreenTransition.None),
+                                    "team", Navigate(scrTeam, ScreenTransition.None),
+                                    "validazione", Navigate(scrValidazioneHR, ScreenTransition.None),
+                                    "riepilogo", Navigate(scrRiepilogo, ScreenTransition.None),
+                                    "chiusura", Navigate(scrChiusura, ScreenTransition.None),
+                                    "admin", Navigate(scrAdmin, ScreenTransition.None),
+                                    "profilo", Navigate(scrProfilo, ScreenTransition.None)
+                                )
+                              DisplayMode: =If(false, DisplayMode.Disabled, DisplayMode.Edit)
+                              FillPortions: =1
+                            Children:
+                              - rie_icoVoceMenu:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =ThisItem.Icona
+                                    OnSelect: =Select(Parent)
+                                    Color: =If(ThisItem.Chiave = "riepilogo", colPrimario, colTestoSecondario)
+                                    Tooltip: |-
+                                      =""
+                                    Width: =28
+                                    Height: =28
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =12
+                                    Y: =(Parent.TemplateHeight - Self.Height) / 2
+                              - rie_lblVoceMenu:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Voce
+                                    Size: =12
+                                    Color: =If(ThisItem.Chiave = "riepilogo", colPrimario, colTesto)
+                                    FontWeight: =If(ThisItem.Chiave = "riepilogo", FontWeight.Semibold, FontWeight.Normal)
+                                    X: =48
+                                    Y: =0
+                                    Width: =Parent.TemplateWidth - 56
+                                    Height: =Parent.TemplateHeight
+                                    OnSelect: =Select(Parent)
+                              - rie_rctVoceAttiva:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colPrimario
+                                    Height: =Parent.TemplateHeight
+                                    X: =0
+                                    Y: =0
+                                    Width: =4
+                                    Visible: =ThisItem.Chiave = "riepilogo"
+                  - rie_conContenuto:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =12
+                        DropShadow: =DropShadow.None
+                        Fill: =colSfondo
+                        FillPortions: =1
+                        Visible: =!isMobile || !varMenuAperto
+                        PaddingTop: =16
+                        PaddingBottom: =16
+                        PaddingLeft: =If(isMobile, 12, 24)
+                        PaddingRight: =If(isMobile, 12, 24)
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                      Children:
+                        - rie_conTitolo:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              Height: =44
+                              FillPortions: =0
+                            Children:
+                              - rie_lblTitolo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Riepilogo mensile"
+                                    Size: =18
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =36
+                                    FillPortions: =1
+                              - rie_btnCarica:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    Text: |-
+                                      ="Aggiorna dati"
+                                    OnSelect: |-
+                                      =Set(varCaricamento, true);
+                                      Set(varMessaggioCaricamento, "Caricamento del riepilogo…");
+                                      Switch(
+                                          varPerimetroRiep,
+                                          "personale",
+                                          // lavoratore: le proprie richieste (SDF_API02)
+                                          If(
+                                              !varMieCaricate,
+                                              With(
+                                                  {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                                  If(
+                                                      rm.esito = "OK",
+                                                      Set(varJsonMieRichieste, rm.dati);
+                                                      Set(varMieCaricate, true),
+                                                      Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                                                  )
+                                              )
+                                          );
+                                      ClearCollect(
+                                          colRiepilogo,
+                                          ForAll(
+                                              Filter(colMieRichieste, annoCompetenza = rie_ddAnno.Selected.Num, rie_ddMese.Selected.Num = 0 || meseCompetenza = rie_ddMese.Selected.Num) As x,
+                                              {id: x.id, idRichiesta: x.idRichiesta, lavoratoreLogin: x.lavoratoreLogin, nominativo: x.nominativo, area: x.area, servizio: x.servizio, centroDiCosto: x.centroDiCosto, coordinatoreLogin: x.coordinatoreLogin, coordinatoreNome: x.coordinatoreNome, codiceCorso: x.codiceCorso, titolo: x.titolo, dataSessione: x.dataSessione, oreFrequentate: x.oreFrequentate, oreRetribuiteRichieste: x.oreRetribuiteRichieste, oreGettoneRichieste: x.oreGettoneRichieste, oreRetribuiteCoord: x.oreRetribuiteCoord, oreGettoneCoord: x.oreGettoneCoord, oreRetribuiteHR: x.oreRetribuiteHR, oreGettoneHR: x.oreGettoneHR, stato: x.stato, possibileDuplicato: x.possibileDuplicato, attestatoPresente: x.attestatoPresente}
+                                          )
+                                      ),
+                                      "team",
+                                      // coordinatore: solo il proprio gruppo (SDF_API05)
+                                      Set(varAnnoTeam, rie_ddAnno.Selected.Num);
+                                      Set(varMeseTeam, rie_ddMese.Selected.Num);
+                                          With(
+                                              {rt: IfError(SDF_API05_RichiesteTeam.Run(varAnnoTeam, varMeseTeam), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                              If(
+                                                  rt.esito = "OK",
+                                                  Set(varJsonTeam, rt.dati);
+                                                  Set(varTeamCaricato, true),
+                                                  Notify("Non è stato possibile caricare le richieste del team. " & rt.messaggio, NotificationType.Error)
+                                              )
+                                          );
+                                          ClearCollect(colRiepilogo, ForAll(colRichiesteTeam As x, {id: x.id, idRichiesta: x.idRichiesta, lavoratoreLogin: x.lavoratoreLogin, nominativo: x.nominativo, area: x.area, servizio: x.servizio, centroDiCosto: x.centroDiCosto, coordinatoreLogin: x.coordinatoreLogin, coordinatoreNome: x.coordinatoreNome, codiceCorso: x.codiceCorso, titolo: x.titolo, dataSessione: x.dataSessione, oreFrequentate: x.oreFrequentate, oreRetribuiteRichieste: x.oreRetribuiteRichieste, oreGettoneRichieste: x.oreGettoneRichieste, oreRetribuiteCoord: x.oreRetribuiteCoord, oreGettoneCoord: x.oreGettoneCoord, oreRetribuiteHR: x.oreRetribuiteHR, oreGettoneHR: x.oreGettoneHR, stato: x.stato, possibileDuplicato: x.possibileDuplicato, attestatoPresente: x.attestatoPresente})),
+                                          "hr",
+                                          // HR / Amministratore: lettura diretta con filtri delegabili su anno e mese, poi stessa forma dei dati
+                                          ClearCollect(
+                                              colRiepSP,
+                                              Filter(
+                                                  'Richieste formazione',
+                                                  'Anno di competenza' = rie_ddAnno.Selected.Num,
+                                                  rie_ddMese.Selected.Num = 0 || 'Mese di competenza' = rie_ddMese.Selected.Num
+                                              )
+                                          );
+                                          ClearCollect(
+                                              colRiepilogo,
+                                              ForAll(
+                                                  colRiepSP As x,
+                                                  {
+                                                      id: x.ID,
+                                                      idRichiesta: x.'ID richiesta',
+                                                      lavoratoreLogin: Lower(x.'Login lavoratore'),
+                                                      nominativo: Trim(x.Cognome & " " & x.Nome),
+                                                      area: x.Area.Value,
+                                                      servizio: x.Servizio,
+                                                      centroDiCosto: x.'Centro di costo',
+                                                      coordinatoreLogin: Lower(x.'Login coordinatore'),
+                                                      coordinatoreNome: x.Coordinatore,
+                                                      codiceCorso: x.'Codice univoco corso',
+                                                      titolo: Coalesce(x.'Titolo del corso a catalogo', x.'Titolo corso libero'),
+                                                      dataSessione: If(IsBlank(x.'Data sessione formativa'), Blank(), Date(Year(x.'Data sessione formativa'), Month(x.'Data sessione formativa'), Day(x.'Data sessione formativa'))),
+                                                      oreFrequentate: Coalesce(x.'Ore frequentate dichiarate', 0),
+                                                      oreRetribuiteRichieste: Coalesce(x.'Ore retribuite richieste', 0),
+                                                      oreGettoneRichieste: Coalesce(x.'Ore gettone richieste', 0),
+                                                      oreRetribuiteCoord: Coalesce(x.'Ore retribuite riconosciute coordinatore', 0),
+                                                      oreGettoneCoord: Coalesce(x.'Ore gettone riconosciute coordinatore', 0),
+                                                      oreRetribuiteHR: Coalesce(x.'Ore retribuite approvate HR', 0),
+                                                      oreGettoneHR: Coalesce(x.'Ore gettone approvate HR', 0),
+                                                      stato: x.'Stato richiesta'.Value,
+                                                      possibileDuplicato: Coalesce(x.'Possibile duplicato', false),
+                                                      attestatoPresente: Coalesce(x.'Attestato presente', false)
+                                                  }
+                                              )
+                                          )
+                                      );Reset(rie_ddArea);
+                                      Reset(rie_ddServizio);
+                                      Reset(rie_ddCdc);
+                                      Reset(rie_ddCoord);
+                                      Reset(rie_ddLavoratore);
+                                      Reset(rie_ddStato);
+                                      ClearCollect(colRiepFiltrato, colRiepilogo);
+                                      Set(varCaricamento, false)
+                                    Size: =12
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =36
+                                    Width: =160
+                                    FillPortions: =0
+                                    RadiusTopLeft: =6
+                                    RadiusTopRight: =6
+                                    RadiusBottomLeft: =6
+                                    RadiusBottomRight: =6
+                                    DisabledFill: =RGBA(200, 200, 200, 1)
+                                    DisabledColor: =RGBA(110, 110, 110, 1)
+                                    Fill: =Color.White
+                                    Color: =colPrimario
+                                    HoverFill: =colPrimarioChiaro
+                                    PressedFill: =colPrimarioChiaro
+                                    HoverColor: =colPrimario
+                                    BorderColor: =colPrimario
+                                    BorderThickness: =1
+                        - rie_lblInfo:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                =Switch(varPerimetroRiep, "personale", "Le tue richieste del periodo.", "team", "Richieste del tuo gruppo di lavoro (senza le bozze).", "Quadro completo di tutte le richieste del periodo (massimo 2000 righe per caricamento: per periodi più ampi filtrare per mese).")
+                              Size: =11
+                              Color: =colTestoSecondario
+                              AutoHeight: =true
+                              Wrap: =true
+                              FillPortions: =0
+                              Height: =20
+                        - rie_rigaPeriodo:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              FillPortions: =0
+                              Height: =If(isMobile, 76 + 76 + 76, 64)
+                            Children:
+                              - rie_conCampoPerimetro:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - rie_lblCampoPerimetro:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Dati"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - rie_ddPerimetro:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =tblPerimetriRiep
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: =LookUp(tblPerimetriRiep, Chiave = varPerimetroRiep).Value
+                                          OnChange: =If(Self.Selected.Chiave <> varPerimetroRiep, Set(varPerimetroRiep, Self.Selected.Chiave); Select(rie_btnCarica))
+                              - rie_conCampoAnno:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - rie_lblCampoAnno:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Anno"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - rie_ddAnno:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =tblAnni
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: =Text(Year(Today()))
+                                          OnChange: =Select(rie_btnCarica)
+                              - rie_conCampoMese:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - rie_lblCampoMese:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Mese"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - rie_ddMese:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =tblMesiFiltro
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: =LookUp(tblMesiFiltro, Num = Month(Today())).Value
+                                          OnChange: =Select(rie_btnCarica)
+                        - rie_lblInfoCarica:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Cambiando dati, anno o mese il riepilogo si ricarica; gli altri filtri agiscono subito. «Aggiorna dati» rilegge le informazioni più recenti."
+                              Size: =11
+                              Color: =colTestoSecondario
+                              AutoHeight: =true
+                              Wrap: =true
+                              FillPortions: =0
+                              Height: =20
+                        - rie_rigaFiltri1:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              FillPortions: =0
+                              Height: =If(isMobile, 76 + 76 + 76, 64)
+                            Children:
+                              - rie_conCampoArea:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - rie_lblCampoArea:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Area"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - rie_ddArea:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =Sort(Distinct(colRiepilogo, area), Value)
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            =""
+                                          AllowEmptySelection: =true
+                                          OnChange: =Select(rie_btnApplica)
+                              - rie_conCampoServizio:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - rie_lblCampoServizio:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Servizio"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - rie_ddServizio:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =Sort(Distinct(colRiepilogo, servizio), Value)
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            =""
+                                          AllowEmptySelection: =true
+                                          OnChange: =Select(rie_btnApplica)
+                              - rie_conCampoCdc:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - rie_lblCampoCdc:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Centro di costo"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - rie_ddCdc:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =Sort(Distinct(colRiepilogo, centroDiCosto), Value)
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            =""
+                                          AllowEmptySelection: =true
+                                          OnChange: =Select(rie_btnApplica)
+                        - rie_rigaFiltri2:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              FillPortions: =0
+                              Height: =If(isMobile, 76 + 76 + 76, 64)
+                            Children:
+                              - rie_conCampoCoord:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - rie_lblCampoCoord:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Coordinatore"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - rie_ddCoord:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =Sort(Distinct(colRiepilogo, coordinatoreNome), Value)
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            =""
+                                          AllowEmptySelection: =true
+                                          OnChange: =Select(rie_btnApplica)
+                              - rie_conCampoLavoratore:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - rie_lblCampoLavoratore:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Lavoratore"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - rie_ddLavoratore:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =Sort(Distinct(colRiepilogo, nominativo), Value)
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            =""
+                                          AllowEmptySelection: =true
+                                          OnChange: =Select(rie_btnApplica)
+                              - rie_conCampoStato:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - rie_lblCampoStato:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Stato"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - rie_ddStato:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: |-
+                                            =ForAll(tblStati, {Value: Stato})
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            =""
+                                          AllowEmptySelection: =true
+                                          OnChange: =Select(rie_btnApplica)
+                        - rie_lblSezKpi:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Indicatori"
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                        - rie_conKpi1:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              LayoutWrap: =true
+                              FillPortions: =0
+                              Height: =If(isMobile, 3 * 100, 88)
+                            Children:
+                              - rie_conKpiLavoratori:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =88
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - rie_lblKpiValLavoratori:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(CountRows(Distinct(colRiepFiltrato, lavoratoreLogin)))
+                                          Size: =20
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - rie_lblKpiTitLavoratori:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Lavoratori coinvolti"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                              - rie_conKpiRichieste:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =88
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - rie_lblKpiValRichieste:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(CountRows(colRiepFiltrato))
+                                          Size: =20
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - rie_lblKpiTitRichieste:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Richieste totali"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                              - rie_conKpiOreFreq:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =88
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - rie_lblKpiValOreFreq:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            =Text(Sum(colRiepFiltrato, oreFrequentate), "[$-en-US]#,##0.##")
+                                          Size: =20
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - rie_lblKpiTitOreFreq:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Ore frequentate"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                              - rie_conKpiRetRich:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =88
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - rie_lblKpiValRetRich:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            =Text(Sum(colRiepFiltrato, oreRetribuiteRichieste), "[$-en-US]#,##0.##")
+                                          Size: =20
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - rie_lblKpiTitRetRich:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Ore retribuite richieste"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                              - rie_conKpiGetRich:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =88
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - rie_lblKpiValGetRich:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            =Text(Sum(colRiepFiltrato, oreGettoneRichieste), "[$-en-US]#,##0.##")
+                                          Size: =20
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - rie_lblKpiTitGetRich:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Ore gettone richieste"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                        - rie_conKpi2:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              LayoutWrap: =true
+                              FillPortions: =0
+                              Height: =If(isMobile, 2 * 100, 88)
+                            Children:
+                              - rie_conKpiRetCoord:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =88
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - rie_lblKpiValRetCoord:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            =Text(Sum(Filter(colRiepFiltrato, stato in Filter(tblStati, ApprovataCoord).Stato), oreRetribuiteCoord), "[$-en-US]#,##0.##")
+                                          Size: =20
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - rie_lblKpiTitRetCoord:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Retribuite approvate dai coordinatori"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                              - rie_conKpiGetCoord:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =88
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - rie_lblKpiValGetCoord:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            =Text(Sum(Filter(colRiepFiltrato, stato in Filter(tblStati, ApprovataCoord).Stato), oreGettoneCoord), "[$-en-US]#,##0.##")
+                                          Size: =20
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - rie_lblKpiTitGetCoord:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Gettone approvate dai coordinatori"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                              - rie_conKpiRetHR:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =88
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - rie_lblKpiValRetHR:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            =Text(Sum(Filter(colRiepFiltrato, stato in Filter(tblStati, ValidataHR).Stato), oreRetribuiteHR), "[$-en-US]#,##0.##")
+                                          Size: =20
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - rie_lblKpiTitRetHR:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Retribuite approvate da HR"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                              - rie_conKpiGetHR:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =2
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colSuperficie
+                                    FillPortions: =1
+                                    LayoutMinWidth: =140
+                                    Height: =88
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    PaddingLeft: =12
+                                    PaddingTop: =8
+                                    RadiusTopLeft: =8
+                                    RadiusTopRight: =8
+                                    RadiusBottomLeft: =8
+                                    RadiusBottomRight: =8
+                                  Children:
+                                    - rie_lblKpiValGetHR:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            =Text(Sum(Filter(colRiepFiltrato, stato in Filter(tblStati, ValidataHR).Stato), oreGettoneHR), "[$-en-US]#,##0.##")
+                                          Size: =20
+                                          Color: =colPrimario
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =36
+                                          FillPortions: =0
+                                    - rie_lblKpiTitGetHR:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Gettone approvate da HR"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          Height: =32
+                                          Wrap: =true
+                                          FillPortions: =0
+                        - rie_lblSezAttesa:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Richieste in attesa di approvazione dei coordinatori: " & CountRows(Filter(colRiepFiltrato, stato = "In attesa del coordinatore" || stato = "Inviata al coordinatore"))
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                        - rie_conIntAttesa:
+                            Control: GroupContainer@1.3.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =colPrimarioChiaro
+                              Height: =34
+                              FillPortions: =0
+                              Visible: =!isMobile
+                            Children:
+                              - rie_lblIntAttesaId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="ID"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1765 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntAttesaLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Lavoratore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.1765
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1765 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntAttesaCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Corso"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.3529
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.2353 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntAttesaData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Data"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.5882
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1176 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntAttesaCoord:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Coordinatore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.7059
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1765 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntAttesaOre:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Ore richieste retr. / gett."
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.8824
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1176 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                        - rie_galAttesa:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =Filter(colRiepFiltrato, stato = "In attesa del coordinatore" || stato = "Inviata al coordinatore")
+                              TemplateSize: =If(isMobile, 88, 44)
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =Set(varIdDettaglio, ThisItem.id); Set(varDaLinkDiretto, false); Navigate(scrDettaglio, ScreenTransition.None)
+                              Height: =Min(6, Max(1, CountRows(Filter(colRiepFiltrato, stato = "In attesa del coordinatore" || stato = "Inviata al coordinatore")))) * If(isMobile, 88, 44) + 2
+                              FillPortions: =0
+                            Children:
+                              - rie_lblAttesaId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.idRichiesta
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1765 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblAttesaLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.nominativo
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.1765
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1765 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblAttesaCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.titolo
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.3529
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.2353 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblAttesaData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Text(ThisItem.dataSessione, "dd/mm/yyyy")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.5882
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1176 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblAttesaCoord:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.coordinatoreNome
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.7059
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1765 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblAttesaOre:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Text(ThisItem.oreRetribuiteRichieste, "[$-en-US]0.##") & " / " & Text(ThisItem.oreGettoneRichieste, "[$-en-US]0.##")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.8824
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1176 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblAttesaM1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.nominativo
+                                    Size: =12
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8
+                                    Y: =4
+                                    Width: =Parent.TemplateWidth - 16
+                                    Height: =32
+                                    Visible: =isMobile
+                                    OnSelect: =Select(Parent)
+                              - rie_lblAttesaM2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.titolo & " · " & Text(ThisItem.dataSessione, "dd/mm/yyyy") & " · " & ThisItem.coordinatoreNome
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    X: =8
+                                    Y: =36
+                                    Width: =Parent.TemplateWidth - 0 - 16
+                                    Height: =Parent.TemplateHeight - 40
+                                    Visible: =isMobile
+                                    Wrap: =true
+                                    VerticalAlign: =VerticalAlign.Top
+                                    OnSelect: =Select(Parent)
+                              - rie_rctAttesaSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+                        - rie_lblSezRespinte:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Richieste respinte dai coordinatori: " & CountRows(Filter(colRiepFiltrato, stato = "Respinta dal coordinatore"))
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                        - rie_conIntRespinte:
+                            Control: GroupContainer@1.3.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =colPrimarioChiaro
+                              Height: =34
+                              FillPortions: =0
+                              Visible: =!isMobile
+                            Children:
+                              - rie_lblIntRespinteId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="ID"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1765 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntRespinteLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Lavoratore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.1765
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1765 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntRespinteCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Corso"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.3529
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.2353 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntRespinteData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Data"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.5882
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1176 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntRespinteCoord:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Coordinatore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.7059
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1765 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntRespinteOre:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Ore richieste retr. / gett."
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.8824
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1176 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                        - rie_galRespinte:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =Filter(colRiepFiltrato, stato = "Respinta dal coordinatore")
+                              TemplateSize: =If(isMobile, 88, 44)
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =Set(varIdDettaglio, ThisItem.id); Set(varDaLinkDiretto, false); Navigate(scrDettaglio, ScreenTransition.None)
+                              Height: =Min(6, Max(1, CountRows(Filter(colRiepFiltrato, stato = "Respinta dal coordinatore")))) * If(isMobile, 88, 44) + 2
+                              FillPortions: =0
+                            Children:
+                              - rie_lblRespinteId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.idRichiesta
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1765 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblRespinteLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.nominativo
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.1765
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1765 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblRespinteCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.titolo
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.3529
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.2353 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblRespinteData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Text(ThisItem.dataSessione, "dd/mm/yyyy")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.5882
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1176 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblRespinteCoord:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.coordinatoreNome
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.7059
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1765 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblRespinteOre:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Text(ThisItem.oreRetribuiteRichieste, "[$-en-US]0.##") & " / " & Text(ThisItem.oreGettoneRichieste, "[$-en-US]0.##")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.8824
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1176 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblRespinteM1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.nominativo
+                                    Size: =12
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8
+                                    Y: =4
+                                    Width: =Parent.TemplateWidth - 16
+                                    Height: =32
+                                    Visible: =isMobile
+                                    OnSelect: =Select(Parent)
+                              - rie_lblRespinteM2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.titolo & " · " & Text(ThisItem.dataSessione, "dd/mm/yyyy") & " · " & ThisItem.coordinatoreNome
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    X: =8
+                                    Y: =36
+                                    Width: =Parent.TemplateWidth - 0 - 16
+                                    Height: =Parent.TemplateHeight - 40
+                                    Visible: =isMobile
+                                    Wrap: =true
+                                    VerticalAlign: =VerticalAlign.Top
+                                    OnSelect: =Select(Parent)
+                              - rie_rctRespinteSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+                        - rie_lblSezDettaglio:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Dettaglio delle richieste (" & CountRows(colRiepFiltrato) & ")"
+                              Size: =14
+                              Color: =colPrimario
+                              FontWeight: =FontWeight.Semibold
+                              Height: =32
+                              FillPortions: =0
+                              VerticalAlign: =VerticalAlign.Bottom
+                        - rie_conIntDettaglio:
+                            Control: GroupContainer@1.3.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =colPrimarioChiaro
+                              Height: =34
+                              FillPortions: =0
+                              Visible: =!isMobile
+                            Children:
+                              - rie_lblIntDettaglioId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="ID"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1250 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntDettaglioLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Lavoratore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.1250
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1250 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntDettaglioOrg:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Servizio / centro di costo"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.2500
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1250 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntDettaglioCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Corso"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.3750
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.1667 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntDettaglioData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Data"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.5417
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.0833 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - rie_lblIntDettaglioFreq:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Freq."
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.6250
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.0417 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                              - rie_lblIntDettaglioRich:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Rich. r/g"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.6667
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.0833 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                              - rie_lblIntDettaglioCoord:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Coord. r/g"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.7500
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.0833 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                              - rie_lblIntDettaglioHR:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="HR r/g"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.8333
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.0833 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                              - rie_lblIntDettaglioStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Stato"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 32) * 0.9167
+                                    Y: =0
+                                    Width: =(Parent.Width - 32) * 0.0833 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                        - rie_galDettaglio:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =Sort(colRiepFiltrato, dataSessione, SortOrder.Descending)
+                              TemplateSize: =If(isMobile, 88, 52)
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =Set(varIdDettaglio, ThisItem.id); Set(varDaLinkDiretto, false); Navigate(scrDettaglio, ScreenTransition.None)
+                              FillPortions: =0
+                              Height: =Min(12, Max(1, CountRows(colRiepFiltrato))) * If(isMobile, 88, 52) + 2
+                            Children:
+                              - rie_lblDettaglioId:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.idRichiesta
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1250 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblDettaglioLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.nominativo
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.1250
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1250 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblDettaglioOrg:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.servizio & Char(10) & ThisItem.centroDiCosto
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.2500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1250 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblDettaglioCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.titolo
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.3750
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.1667 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblDettaglioData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Text(ThisItem.dataSessione, "dd/mm/yyyy")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.5417
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.0833 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblDettaglioFreq:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Text(ThisItem.oreFrequentate, "[$-en-US]0.##")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.6250
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.0417 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblDettaglioRich:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Text(ThisItem.oreRetribuiteRichieste, "[$-en-US]0.##") & " / " & Text(ThisItem.oreGettoneRichieste, "[$-en-US]0.##")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.6667
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.0833 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblDettaglioCoord:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Text(ThisItem.oreRetribuiteCoord, "[$-en-US]0.##") & " / " & Text(ThisItem.oreGettoneCoord, "[$-en-US]0.##")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.7500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.0833 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblDettaglioHR:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Text(ThisItem.oreRetribuiteHR, "[$-en-US]0.##") & " / " & Text(ThisItem.oreGettoneHR, "[$-en-US]0.##")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 16) * 0.8333
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 16) * 0.0833 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - rie_lblDettaglioStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.stato
+                                    Size: =10
+                                    Color: =Color.White
+                                    FontWeight: =FontWeight.Semibold
+                                    Fill: =Coalesce(LookUp(tblStati, Stato = ThisItem.stato, Colore), colTestoSecondario)
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    X: =If(isMobile, Parent.TemplateWidth - Self.Width - 8, 8 + (Parent.TemplateWidth - 16) * 0.9167)
+                                    Y: =If(isMobile, 8, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Width: =If(isMobile, 150, (Parent.TemplateWidth - 16) * 0.0833 - 4)
+                                    Height: =If(isMobile, 22, 34)
+                                    OnSelect: =Select(Parent)
+                              - rie_lblDettaglioM1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.nominativo
+                                    Size: =12
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8
+                                    Y: =4
+                                    Width: =Parent.TemplateWidth - 170
+                                    Height: =32
+                                    Visible: =isMobile
+                                    OnSelect: =Select(Parent)
+                              - rie_lblDettaglioM2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =ThisItem.titolo & " · " & Text(ThisItem.dataSessione, "dd/mm/yyyy") & " · freq. " & Text(ThisItem.oreFrequentate, "[$-en-US]0.##") & " · rich. " & Text(ThisItem.oreRetribuiteRichieste, "[$-en-US]0.##") & " / " & Text(ThisItem.oreGettoneRichieste, "[$-en-US]0.##") & " · HR " & Text(ThisItem.oreRetribuiteHR, "[$-en-US]0.##") & " / " & Text(ThisItem.oreGettoneHR, "[$-en-US]0.##")
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    X: =8
+                                    Y: =36
+                                    Width: =Parent.TemplateWidth - 0 - 16
+                                    Height: =Parent.TemplateHeight - 40
+                                    Visible: =isMobile
+                                    Wrap: =true
+                                    VerticalAlign: =VerticalAlign.Top
+                                    OnSelect: =Select(Parent)
+                              - rie_rctDettaglioSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+                        - rie_lblInfoDettaglio:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="L’elenco mostra fino a 12 righe alla volta: scorri dentro la tabella per vedere le altre."
+                              Size: =11
+                              Color: =colTestoSecondario
+                              AutoHeight: =true
+                              Wrap: =true
+                              FillPortions: =0
+                              Height: =20
+                              Visible: =CountRows(colRiepFiltrato) > 12
+      - rie_btnApplica:
+          Control: Classic/Button@2.2.0
+          Properties:
+            Text: |-
+              ="(procedura)"
+            OnSelect: |-
+              =ClearCollect(
+                  colRiepFiltrato,
+                  Filter(
+                      colRiepilogo,
+                      IsBlank(rie_ddArea.Selected.Value) || area = rie_ddArea.Selected.Value,
+                      IsBlank(rie_ddServizio.Selected.Value) || servizio = rie_ddServizio.Selected.Value,
+                      IsBlank(rie_ddCdc.Selected.Value) || centroDiCosto = rie_ddCdc.Selected.Value,
+                      IsBlank(rie_ddCoord.Selected.Value) || coordinatoreNome = rie_ddCoord.Selected.Value,
+                      IsBlank(rie_ddLavoratore.Selected.Value) || nominativo = rie_ddLavoratore.Selected.Value,
+                      IsBlank(rie_ddStato.Selected.Value) || stato = rie_ddStato.Selected.Value
+                  )
+              )
+            Size: =12
+            FontWeight: =FontWeight.Semibold
+            Height: =10
+            Width: =10
+            RadiusTopLeft: =6
+            RadiusTopRight: =6
+            RadiusBottomLeft: =6
+            RadiusBottomRight: =6
+            DisabledFill: =RGBA(200, 200, 200, 1)
+            DisabledColor: =RGBA(110, 110, 110, 1)
+            Fill: =colPrimario
+            Color: =Color.White
+            HoverFill: =colPrimarioScuro
+            PressedFill: =colPrimarioScuro
+            BorderThickness: =0
+            Visible: =false
+            X: =0
+            Y: =0
+      - rie_conCaricamento:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =varCaricamento
+          Children:
+            - rie_rctCaricamento:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =RGBA(255, 255, 255, 0.65)
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - rie_lblCaricamento:
+                Control: Label@2.5.1
+                Properties:
+                  Text: =Coalesce(varMessaggioCaricamento, "Caricamento in corso…") & Char(10) & "Attendere qualche secondo."
+                  Size: =14
+                  Color: =colPrimario
+                  FontWeight: =FontWeight.Semibold
+                  Align: =Align.Center
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(360, Parent.Width - 32)
+                  Height: =96
+                  Wrap: =true
+                  BorderColor: =colBordo
+                  BorderThickness: =1

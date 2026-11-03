@@ -1,0 +1,2025 @@
+# =============================================================================
+#  Gestione ore formazione – Società Dolce · schermata scrDettaglio
+#  5 – Dettaglio e approvazione (lavoratore in lettura, coordinatore, HR)
+# -----------------------------------------------------------------------------
+#  Formato: sorgente YAML di Power Apps Studio (Copia codice / Incolla codice).
+#  Come incollarla: vedere powerapps/README.md. Le formule sono in notazione
+#  inglese (separatore "," e concatenazione ";"): Studio in italiano le mostra
+#  con ";" e ";;" automaticamente.
+#  Dati: SDF_API10 (dettaglio, permessi, storico), SDF_API06 (coordinatore), SDF_API07 (HR), SDF_API03 (annulla).
+# =============================================================================
+Screens:
+  scrDettaglio:
+    Properties:
+      Fill: =colSfondo
+      OnVisible: |-
+        =Set(varMenuAperto, false);
+        UpdateContext({locDialogo: "", locAzione: "", locErrore: ""});
+        Set(varCaricamento, true);
+        Set(varMessaggioCaricamento, "Caricamento della richiesta…");
+        Set(varJsonDettaglio, jsonVuotoDettaglio);
+        With(
+            {r: IfError(SDF_API10_DettaglioRichiesta.Run(varIdDettaglio), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+            If(
+                r.esito = "OK",
+                Set(varJsonDettaglio, r.dati),
+                UpdateContext({locErrore: r.messaggio});
+                Notify(r.messaggio, NotificationType.Error)
+            )
+        );
+        Reset(det_txtOreRetCoord);
+        Reset(det_txtOreGetCoord);
+        Reset(det_txtNotaCoord);
+        Reset(det_txtOreRetHR);
+        Reset(det_txtOreGetHR);
+        Reset(det_txtNotaHR);
+        Set(varCaricamento, false)
+    Children:
+      - det_conRadice:
+          Control: GroupContainer@1.3.0
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutJustifyContent: =LayoutJustifyContent.Start
+            LayoutGap: =0
+            DropShadow: =DropShadow.None
+            Fill: =colSfondo
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+          Children:
+            - det_conHeader:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.None
+                  Fill: =colPrimario
+                  Height: =56
+                  FillPortions: =0
+                  PaddingLeft: =12
+                  PaddingRight: =16
+                Children:
+                  - det_icoMenu:
+                      Control: Classic/Icon@2.5.0
+                      Properties:
+                        Icon: =Icon.Hamburger
+                        OnSelect: =Set(varMenuAperto, !varMenuAperto)
+                        Color: =Color.White
+                        Tooltip: |-
+                          ="Apri o chiudi il menu"
+                        Width: =40
+                        Height: =40
+                        PaddingTop: =4
+                        PaddingBottom: =4
+                        PaddingLeft: =4
+                        PaddingRight: =4
+                        FillPortions: =0
+                        Visible: =isMobile
+                  - det_lblTitoloApp:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Gestione ore formazione"
+                        Size: =16
+                        Color: =Color.White
+                        FontWeight: =FontWeight.Semibold
+                        FillPortions: =1
+                        Height: =40
+                        LayoutMinWidth: =150
+                  - det_lblUtente:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =User().FullName & If(haRuolo, " · " & ruoloApp, "")
+                        Size: =11
+                        Color: =Color.White
+                        Align: =Align.Right
+                        Width: =340
+                        Height: =40
+                        FillPortions: =0
+                        Visible: =!isMobile
+            - det_conCorpo:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =0
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(0, 0, 0, 0)
+                  FillPortions: =1
+                Children:
+                  - det_conMenu:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =0
+                        DropShadow: =DropShadow.None
+                        Fill: =colSuperficie
+                        Width: =If(isMobile, Parent.Width, 230)
+                        FillPortions: =0
+                        Visible: =!isMobile || varMenuAperto
+                        BorderColor: =colBordo
+                        BorderThickness: =1
+                        PaddingTop: =8
+                      Children:
+                        - det_lblMenuUtente:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: =User().FullName & Char(10) & ruoloApp
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Visible: =isMobile
+                              Height: =48
+                              FillPortions: =0
+                              PaddingLeft: =12
+                              Wrap: =true
+                        - det_galMenu:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =tblMenu
+                              TemplateSize: =48
+                              TemplatePadding: =0
+                              ShowScrollbar: =false
+                              BorderColor: =colBordo
+                              BorderThickness: =0
+                              Fill: =RGBA(0, 0, 0, 0)
+                              TemplateFill: =If(ThisItem.Chiave = "", colPrimarioChiaro, RGBA(0, 0, 0, 0))
+                              OnSelect: |-
+                                =Set(varMenuAperto, false);
+                                Switch(
+                                    ThisItem.Chiave,
+                                    "home", Navigate(scrHome, ScreenTransition.None),
+                                    "mie", Navigate(scrMieRichieste, ScreenTransition.None),
+                                    "nuova", Set(varIdModifica, 0); Navigate(scrRichiesta, ScreenTransition.None),
+                                    "team", Navigate(scrTeam, ScreenTransition.None),
+                                    "validazione", Navigate(scrValidazioneHR, ScreenTransition.None),
+                                    "riepilogo", Navigate(scrRiepilogo, ScreenTransition.None),
+                                    "chiusura", Navigate(scrChiusura, ScreenTransition.None),
+                                    "admin", Navigate(scrAdmin, ScreenTransition.None),
+                                    "profilo", Navigate(scrProfilo, ScreenTransition.None)
+                                )
+                              DisplayMode: =If(false, DisplayMode.Disabled, DisplayMode.Edit)
+                              FillPortions: =1
+                            Children:
+                              - det_icoVoceMenu:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =ThisItem.Icona
+                                    OnSelect: =Select(Parent)
+                                    Color: =If(ThisItem.Chiave = "", colPrimario, colTestoSecondario)
+                                    Tooltip: |-
+                                      =""
+                                    Width: =28
+                                    Height: =28
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =12
+                                    Y: =(Parent.TemplateHeight - Self.Height) / 2
+                              - det_lblVoceMenu:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Voce
+                                    Size: =12
+                                    Color: =If(ThisItem.Chiave = "", colPrimario, colTesto)
+                                    FontWeight: =If(ThisItem.Chiave = "", FontWeight.Semibold, FontWeight.Normal)
+                                    X: =48
+                                    Y: =0
+                                    Width: =Parent.TemplateWidth - 56
+                                    Height: =Parent.TemplateHeight
+                                    OnSelect: =Select(Parent)
+                              - det_rctVoceAttiva:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colPrimario
+                                    Height: =Parent.TemplateHeight
+                                    X: =0
+                                    Y: =0
+                                    Width: =4
+                                    Visible: =ThisItem.Chiave = ""
+                  - det_conContenuto:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =12
+                        DropShadow: =DropShadow.None
+                        Fill: =colSfondo
+                        FillPortions: =1
+                        Visible: =!isMobile || !varMenuAperto
+                        PaddingTop: =16
+                        PaddingBottom: =16
+                        PaddingLeft: =If(isMobile, 12, 24)
+                        PaddingRight: =If(isMobile, 12, 24)
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                      Children:
+                        - det_conTitolo:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              Height: =44
+                              FillPortions: =0
+                            Children:
+                              - det_icoIndietro:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.BackArrow
+                                    OnSelect: |-
+                                      =If(
+                                          varDaLinkDiretto,
+                                          Set(varDaLinkDiretto, false);
+                                          Navigate(scrHome, ScreenTransition.None),
+                                          Back()
+                                      )
+                                    Color: =colPrimario
+                                    Tooltip: |-
+                                      ="Indietro"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    FillPortions: =0
+                              - det_lblTitolo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Richiesta " & recDettaglio.idRichiesta
+                                    Size: =18
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =36
+                                    FillPortions: =1
+                              - det_lblStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =recDettaglio.stato
+                                    Size: =10
+                                    Color: =Color.White
+                                    FontWeight: =FontWeight.Semibold
+                                    Fill: =recDettaglio.colore
+                                    Align: =Align.Center
+                                    Width: =If(isMobile, 150, 240)
+                                    Height: =28
+                                    Visible: =!IsBlank(recDettaglio.stato)
+                        - det_lblErrore:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: =locErrore
+                              Size: =12
+                              Color: =Color.White
+                              FontWeight: =FontWeight.Semibold
+                              Fill: =colErrore
+                              PaddingLeft: =12
+                              Height: =40
+                              Wrap: =true
+                              FillPortions: =0
+                              Visible: =!IsBlank(locErrore)
+                        - det_lblMeseChiuso:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Il mese di competenza è chiuso: la richiesta non è più modificabile."
+                              Size: =12
+                              Color: =Color.White
+                              FontWeight: =FontWeight.Semibold
+                              Fill: =colTestoSecondario
+                              PaddingLeft: =12
+                              Height: =36
+                              FillPortions: =0
+                              Visible: =recPermessi.meseChiuso
+                        - det_conPanCoord:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colSuccesso
+                              BorderThickness: =2
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + det_lblSezCoord.Height + 8 + det_lblInfoCoord.Height + 8 + det_rigaOreCoord.Height + 8 + det_conCampoNotaCoord.Height + 8 + If(det_lblErrCoord.Visible, det_lblErrCoord.Height + 8, 0) + det_conPulsantiCoord.Height + 8
+                              Visible: =recPermessi.esitoCoordinatore
+                            Children:
+                              - det_lblSezCoord:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Esito del coordinatore"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - det_lblInfoCoord:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Le ore riconosciute partono dalle ore richieste e si possono ridurre. Per respingere o chiedere un’integrazione la nota è obbligatoria."
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    AutoHeight: =true
+                                    Wrap: =true
+                                    FillPortions: =0
+                                    Height: =20
+                              - det_rigaOreCoord:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76, 64)
+                                  Children:
+                                    - det_conCampoOreRetCoord:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - det_lblCampoOreRetCoord:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ore retribuite riconosciute"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - det_txtOreRetCoord:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: =recDettaglio.oreRetribuiteRichieste
+                                                HintText: |-
+                                                  ="0"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                Format: =TextFormat.Number
+                                    - det_conCampoOreGetCoord:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - det_lblCampoOreGetCoord:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ore gettone riconosciute"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - det_txtOreGetCoord:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: =recDettaglio.oreGettoneRichieste
+                                                HintText: |-
+                                                  ="0"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                Format: =TextFormat.Number
+                                    - det_conCampoOreFreqCoord:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - det_lblCampoOreFreqCoord:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ore frequentate dichiarate"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - det_lblOreFreqCoord:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  =Text(recDettaglio.oreFrequentate, "[$-en-US]0.##") & " h"
+                                                Size: =13
+                                                Color: =colTesto
+                                                FontWeight: =FontWeight.Semibold
+                                                FillPortions: =0
+                                                Height: =36
+                              - det_conCampoNotaCoord:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =100
+                                  Children:
+                                    - det_lblCampoNotaCoord:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Nota per il lavoratore (obbligatoria per respingere o chiedere integrazione)"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - det_txtNotaCoord:
+                                        Control: Classic/TextInput@2.3.2
+                                        Properties:
+                                          Default: |-
+                                            =""
+                                          HintText: |-
+                                            ="Motivazione o cosa correggere"
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =72
+                                          FillPortions: =0
+                                          RadiusTopLeft: =4
+                                          RadiusTopRight: =4
+                                          RadiusBottomLeft: =4
+                                          RadiusBottomRight: =4
+                                          Mode: =TextMode.MultiLine
+                              - det_lblErrCoord:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =With(
+                                          {rt: Coalesce(Value(det_txtOreRetCoord.Text), 0), gt: Coalesce(Value(det_txtOreGetCoord.Text), 0)},
+                                          If(
+                                              rt < 0 || gt < 0, "R4 · Le ore riconosciute non possono essere negative.",
+                                              rt + gt > recDettaglio.oreFrequentate, "R4 · Ore retribuite + gettone riconosciute (" & Text(rt + gt, "[$-en-US]0.##") & ") superano le ore frequentate (" & Text(recDettaglio.oreFrequentate, "[$-en-US]0.##") & ").",
+                                              ""
+                                          )
+                                      )
+                                    Size: =11
+                                    Color: =colErrore
+                                    Height: =24
+                                    Wrap: =true
+                                    FillPortions: =0
+                                    Visible: =!IsBlank(Self.Text)
+                              - det_conPulsantiCoord:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Horizontal
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =8
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    LayoutWrap: =true
+                                    Height: =If(isMobile, 3 * 48, 48)
+                                    FillPortions: =0
+                                  Children:
+                                    - det_icoApprova:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Check
+                                          OnSelect: |-
+                                            =If(IsBlank(det_lblErrCoord.Text), UpdateContext({locAzione: "approva", locDialogo: "coord"}))
+                                          Color: =colSuccesso
+                                          Tooltip: |-
+                                            ="Approva"
+                                          Width: =32
+                                          Height: =32
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          FillPortions: =0
+                                    - det_btnApprova:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Approva"
+                                          OnSelect: |-
+                                            =UpdateContext({locAzione: "approva", locDialogo: "coord"})
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =140
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colSuccesso
+                                          Color: =Color.White
+                                          HoverFill: =ColorFade(colSuccesso, -15%)
+                                          PressedFill: =ColorFade(colSuccesso, -25%)
+                                          BorderThickness: =0
+                                          DisplayMode: =If(IsBlank(det_lblErrCoord.Text), DisplayMode.Edit, DisplayMode.Disabled)
+                                    - det_icoRespingi:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Cancel
+                                          OnSelect: |-
+                                            =If(!IsBlank(Trim(det_txtNotaCoord.Text)), UpdateContext({locAzione: "respingi", locDialogo: "coord"}), Notify("Per respingere scrivi la motivazione.", NotificationType.Warning))
+                                          Color: =colErrore
+                                          Tooltip: |-
+                                            ="Respingi"
+                                          Width: =32
+                                          Height: =32
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          FillPortions: =0
+                                    - det_btnRespingi:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Respingi"
+                                          OnSelect: |-
+                                            =UpdateContext({locAzione: "respingi", locDialogo: "coord"})
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =140
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colErrore
+                                          Color: =Color.White
+                                          HoverFill: =ColorFade(colErrore, -15%)
+                                          PressedFill: =ColorFade(colErrore, -25%)
+                                          BorderThickness: =0
+                                          DisplayMode: =If(!IsBlank(Trim(det_txtNotaCoord.Text)), DisplayMode.Edit, DisplayMode.Disabled)
+                                          Tooltip: |-
+                                            ="Scrivi prima la motivazione"
+                                    - det_icoIntegrazioneCoord:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Message
+                                          OnSelect: |-
+                                            =If(!IsBlank(Trim(det_txtNotaCoord.Text)), UpdateContext({locAzione: "integrazione", locDialogo: "coord"}), Notify("Per chiedere un’integrazione scrivi cosa correggere.", NotificationType.Warning))
+                                          Color: =colAvviso
+                                          Tooltip: |-
+                                            ="Richiedi integrazione"
+                                          Width: =32
+                                          Height: =32
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          FillPortions: =0
+                                    - det_btnIntegrazioneCoord:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Richiedi integrazione"
+                                          OnSelect: |-
+                                            =UpdateContext({locAzione: "integrazione", locDialogo: "coord"})
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =200
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colAvviso
+                                          Color: =Color.White
+                                          HoverFill: =ColorFade(colAvviso, -15%)
+                                          PressedFill: =ColorFade(colAvviso, -25%)
+                                          BorderThickness: =0
+                                          DisplayMode: =If(!IsBlank(Trim(det_txtNotaCoord.Text)), DisplayMode.Edit, DisplayMode.Disabled)
+                                          Tooltip: |-
+                                            ="Scrivi prima cosa deve essere corretto"
+                        - det_conPanHR:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colAccento
+                              BorderThickness: =2
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + det_lblSezHR.Height + 8 + det_lblInfoHR.Height + 8 + det_rigaOreHR.Height + 8 + det_conCampoNotaHR.Height + 8 + If(det_lblErrHR.Visible, det_lblErrHR.Height + 8, 0) + det_conPulsantiHR.Height + 8
+                              Visible: =recPermessi.esitoHR
+                            Children:
+                              - det_lblSezHR:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Validazione HR"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - det_lblInfoHR:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Le ore HR partono da quelle riconosciute dal coordinatore e si possono modificare. Per respingere o chiedere un’integrazione la nota è obbligatoria: la ricevono lavoratore e coordinatore."
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    AutoHeight: =true
+                                    Wrap: =true
+                                    FillPortions: =0
+                                    Height: =20
+                              - det_rigaOreHR:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =12
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =0
+                                    Height: =If(isMobile, 76 + 76 + 76, 64)
+                                  Children:
+                                    - det_conCampoOreRetHR:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - det_lblCampoOreRetHR:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ore retribuite approvate HR"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - det_txtOreRetHR:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: =recDettaglio.oreRetribuiteCoord
+                                                HintText: |-
+                                                  ="0"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                Format: =TextFormat.Number
+                                    - det_conCampoOreGetHR:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - det_lblCampoOreGetHR:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ore gettone approvate HR"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - det_txtOreGetHR:
+                                              Control: Classic/TextInput@2.3.2
+                                              Properties:
+                                                Default: =recDettaglio.oreGettoneCoord
+                                                HintText: |-
+                                                  ="0"
+                                                Size: =12
+                                                BorderColor: =colBordo
+                                                Height: =36
+                                                FillPortions: =0
+                                                RadiusTopLeft: =4
+                                                RadiusTopRight: =4
+                                                RadiusBottomLeft: =4
+                                                RadiusBottomRight: =4
+                                                Format: =TextFormat.Number
+                                    - det_conCampoOreFreqHR:
+                                        Control: GroupContainer@1.3.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutAlignItems: =LayoutAlignItems.Stretch
+                                          LayoutJustifyContent: =LayoutJustifyContent.Start
+                                          LayoutGap: =4
+                                          DropShadow: =DropShadow.None
+                                          Fill: =RGBA(0, 0, 0, 0)
+                                          FillPortions: =1
+                                          LayoutMinWidth: =200
+                                          Height: =64
+                                        Children:
+                                          - det_lblCampoOreFreqHR:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  ="Ore frequentate dichiarate"
+                                                Size: =11
+                                                Color: =colTestoSecondario
+                                                Height: =20
+                                                FillPortions: =0
+                                          - det_lblOreFreqHR:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                Text: |-
+                                                  =Text(recDettaglio.oreFrequentate, "[$-en-US]0.##") & " h"
+                                                Size: =13
+                                                Color: =colTesto
+                                                FontWeight: =FontWeight.Semibold
+                                                FillPortions: =0
+                                                Height: =36
+                              - det_conCampoNotaHR:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =100
+                                  Children:
+                                    - det_lblCampoNotaHR:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Nota HR (obbligatoria per respingere o chiedere integrazione)"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - det_txtNotaHR:
+                                        Control: Classic/TextInput@2.3.2
+                                        Properties:
+                                          Default: |-
+                                            =""
+                                          HintText: |-
+                                            ="Motivazione o cosa correggere"
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =72
+                                          FillPortions: =0
+                                          RadiusTopLeft: =4
+                                          RadiusTopRight: =4
+                                          RadiusBottomLeft: =4
+                                          RadiusBottomRight: =4
+                                          Mode: =TextMode.MultiLine
+                              - det_lblErrHR:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =With(
+                                          {rt: Coalesce(Value(det_txtOreRetHR.Text), 0), gt: Coalesce(Value(det_txtOreGetHR.Text), 0)},
+                                          If(
+                                              rt < 0 || gt < 0, "R4 · Le ore riconosciute non possono essere negative.",
+                                              rt + gt > recDettaglio.oreFrequentate, "R4 · Ore retribuite + gettone riconosciute (" & Text(rt + gt, "[$-en-US]0.##") & ") superano le ore frequentate (" & Text(recDettaglio.oreFrequentate, "[$-en-US]0.##") & ").",
+                                              ""
+                                          )
+                                      )
+                                    Size: =11
+                                    Color: =colErrore
+                                    Height: =24
+                                    Wrap: =true
+                                    FillPortions: =0
+                                    Visible: =!IsBlank(Self.Text)
+                              - det_conPulsantiHR:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Horizontal
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =8
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    LayoutWrap: =true
+                                    Height: =If(isMobile, 3 * 48, 48)
+                                    FillPortions: =0
+                                  Children:
+                                    - det_icoValida:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Check
+                                          OnSelect: |-
+                                            =If(IsBlank(det_lblErrHR.Text), UpdateContext({locAzione: "valida", locDialogo: "hr"}))
+                                          Color: =colSuccesso
+                                          Tooltip: |-
+                                            ="Valida"
+                                          Width: =32
+                                          Height: =32
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          FillPortions: =0
+                                    - det_btnValida:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Valida"
+                                          OnSelect: |-
+                                            =UpdateContext({locAzione: "valida", locDialogo: "hr"})
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =140
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colSuccesso
+                                          Color: =Color.White
+                                          HoverFill: =ColorFade(colSuccesso, -15%)
+                                          PressedFill: =ColorFade(colSuccesso, -25%)
+                                          BorderThickness: =0
+                                          DisplayMode: =If(IsBlank(det_lblErrHR.Text), DisplayMode.Edit, DisplayMode.Disabled)
+                                    - det_icoRespingiHR:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Cancel
+                                          OnSelect: |-
+                                            =If(!IsBlank(Trim(det_txtNotaHR.Text)), UpdateContext({locAzione: "respingi", locDialogo: "hr"}), Notify("Per respingere scrivi la motivazione.", NotificationType.Warning))
+                                          Color: =colErrore
+                                          Tooltip: |-
+                                            ="Respingi"
+                                          Width: =32
+                                          Height: =32
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          FillPortions: =0
+                                    - det_btnRespingiHR:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Respingi"
+                                          OnSelect: |-
+                                            =UpdateContext({locAzione: "respingi", locDialogo: "hr"})
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =140
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colErrore
+                                          Color: =Color.White
+                                          HoverFill: =ColorFade(colErrore, -15%)
+                                          PressedFill: =ColorFade(colErrore, -25%)
+                                          BorderThickness: =0
+                                          DisplayMode: =If(!IsBlank(Trim(det_txtNotaHR.Text)), DisplayMode.Edit, DisplayMode.Disabled)
+                                    - det_icoIntegrazioneHR:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Message
+                                          OnSelect: |-
+                                            =If(!IsBlank(Trim(det_txtNotaHR.Text)), UpdateContext({locAzione: "integrazione", locDialogo: "hr"}), Notify("Per chiedere un’integrazione scrivi cosa correggere.", NotificationType.Warning))
+                                          Color: =colAvviso
+                                          Tooltip: |-
+                                            ="Richiedi integrazione"
+                                          Width: =32
+                                          Height: =32
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          FillPortions: =0
+                                    - det_btnIntegrazioneHR:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Richiedi integrazione"
+                                          OnSelect: |-
+                                            =UpdateContext({locAzione: "integrazione", locDialogo: "hr"})
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =200
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colAvviso
+                                          Color: =Color.White
+                                          HoverFill: =ColorFade(colAvviso, -15%)
+                                          PressedFill: =ColorFade(colAvviso, -25%)
+                                          BorderThickness: =0
+                                          DisplayMode: =If(!IsBlank(Trim(det_txtNotaHR.Text)), DisplayMode.Edit, DisplayMode.Disabled)
+                        - det_conAzioniLav:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + det_lblSezAzioniLav.Height + 8 + det_conAzioniLavRiga.Height + 8
+                              Visible: =recPermessi.modifica || recPermessi.annulla
+                            Children:
+                              - det_lblSezAzioniLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Azioni sulla tua richiesta"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - det_conAzioniLavRiga:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Horizontal
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =8
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    Height: =44
+                                    FillPortions: =0
+                                  Children:
+                                    - det_icoModifica:
+                                        Control: Classic/Icon@2.5.0
+                                        Properties:
+                                          Icon: =Icon.Edit
+                                          OnSelect: =Set(varIdModifica, recDettaglio.id); Navigate(scrRichiesta, ScreenTransition.None)
+                                          Color: =colPrimario
+                                          Tooltip: |-
+                                            ="Modifica"
+                                          Width: =32
+                                          Height: =32
+                                          PaddingTop: =4
+                                          PaddingBottom: =4
+                                          PaddingLeft: =4
+                                          PaddingRight: =4
+                                          FillPortions: =0
+                                          Visible: =recPermessi.modifica
+                                    - det_btnModifica:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Modifica e reinvia"
+                                          OnSelect: =Set(varIdModifica, recDettaglio.id); Navigate(scrRichiesta, ScreenTransition.None)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =190
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colPrimario
+                                          Color: =Color.White
+                                          HoverFill: =colPrimarioScuro
+                                          PressedFill: =colPrimarioScuro
+                                          BorderThickness: =0
+                                          Visible: =recPermessi.modifica
+                                    - det_btnAnnullaRic:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Annulla richiesta"
+                                          OnSelect: |-
+                                            =UpdateContext({locDialogo: "annulla", locAzione: "annulla"})
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =180
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =colErrore
+                                          Color: =Color.White
+                                          HoverFill: =ColorFade(colErrore, -15%)
+                                          PressedFill: =ColorFade(colErrore, -25%)
+                                          BorderThickness: =0
+                                          Visible: =recPermessi.annulla
+                        - det_conDati:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + If(det_lblDuplicato.Visible, det_lblDuplicato.Height + 8, 0) + If(det_lblAnomalie.Visible, det_lblAnomalie.Height + 8, 0) + det_htmDati.Height + 8
+                              Visible: =IsBlank(locErrore)
+                            Children:
+                              - det_lblDuplicato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="⚠ Possibile duplicato: esiste un’altra richiesta dello stesso lavoratore per lo stesso corso nella stessa data."
+                                    Size: =12
+                                    Color: =colAvviso
+                                    FontWeight: =FontWeight.Semibold
+                                    Wrap: =true
+                                    Height: =40
+                                    FillPortions: =0
+                                    Visible: =recDettaglio.possibileDuplicato
+                              - det_lblAnomalie:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Anomalie rilevate: " & recDettaglio.anomalie
+                                    Size: =12
+                                    Color: =colAvviso
+                                    AutoHeight: =true
+                                    Wrap: =true
+                                    Height: =24
+                                    FillPortions: =0
+                                    Visible: =!IsBlank(recDettaglio.anomalie)
+                              - det_htmDati:
+                                  Control: HtmlViewer@2.1.0
+                                  Properties:
+                                    HtmlText: |-
+                                      ="<div style='font-family:Segoe UI,sans-serif;color:#201F1E'>" &
+                                      "<div style='font-size:15px;font-weight:600;color:#005E7D;margin:14px 0 6px 0'>Lavoratore</div>" &
+                                      "<div style='display:flex;flex-wrap:wrap;gap:10px 18px'>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Lavoratore</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.nominativo, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>E-mail di contatto</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.emailPersonale, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Area</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.area, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Servizio</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.servizio, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Centro di costo</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.centroDiCosto, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Coordinatore</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.coordinatoreNome, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "</div>" &
+                                      "<div style='font-size:15px;font-weight:600;color:#005E7D;margin:14px 0 6px 0'>Corso</div>" &
+                                      "<div style='display:flex;flex-wrap:wrap;gap:10px 18px'>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Titolo del corso</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.titolo, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Codice univoco corso</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.codiceCorso, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Ente erogatore</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.enteErogatore, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Modalità di svolgimento</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.modalita, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Durata complessiva corso</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(Text(recDettaglio.durataCorso, "[$-en-US]0.##") & " h", "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Più giornate formative</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(If(recDettaglio.piuGiornate, "Sì", "No"), "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "</div>" &
+                                      "<div style='font-size:15px;font-weight:600;color:#005E7D;margin:14px 0 6px 0'>Sessione, presenza e ore</div>" &
+                                      "<div style='display:flex;flex-wrap:wrap;gap:10px 18px'>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Data sessione</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(Text(recDettaglio.dataSessione, "dd/mm/yyyy"), "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Sessione (inizio – fine)</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.oraInizioSessione & " – " & recDettaglio.oraFineSessione & " (" & Text(recDettaglio.durataSessione, "[$-en-US]0.##") & " h)", "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Presenza (ingresso – uscita)</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.oraIngresso & " – " & recDettaglio.oraUscita & " (" & Text(recDettaglio.oreFrequentate, "[$-en-US]0.##") & " h frequentate)", "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Ore richieste (retribuite · gettone)</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(Text(recDettaglio.oreRetribuiteRichieste, "[$-en-US]0.##") & " retr. · " & Text(recDettaglio.oreGettoneRichieste, "[$-en-US]0.##") & " gett.", "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Riconosciute dal coordinatore</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(Text(recDettaglio.oreRetribuiteCoord, "[$-en-US]0.##") & " retr. · " & Text(recDettaglio.oreGettoneCoord, "[$-en-US]0.##") & " gett.", "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Approvate da HR</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(Text(recDettaglio.oreRetribuiteHR, "[$-en-US]0.##") & " retr. · " & Text(recDettaglio.oreGettoneHR, "[$-en-US]0.##") & " gett.", "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "</div>" &
+                                      "<div style='font-size:15px;font-weight:600;color:#005E7D;margin:14px 0 6px 0'>Note e date</div>" &
+                                      "<div style='display:flex;flex-wrap:wrap;gap:10px 18px'>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Note del lavoratore</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.noteLavoratore, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Note del coordinatore</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.noteCoordinatore, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Note HR</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.noteHR, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Competenza</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(Text(recDettaglio.meseCompetenza, "00") & "/" & recDettaglio.annoCompetenza, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Date</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce("Creata il " & Text(recDettaglio.creato, "dd/mm/yyyy hh:mm") &
+                                      If(!IsBlank(recDettaglio.dataInvio), " · inviata il " & Text(recDettaglio.dataInvio, "dd/mm/yyyy hh:mm"), "") &
+                                      If(!IsBlank(recDettaglio.dataApprovazioneCoord), " · approvata dal coordinatore il " & Text(recDettaglio.dataApprovazioneCoord, "dd/mm/yyyy hh:mm"), "") &
+                                      If(!IsBlank(recDettaglio.dataValidazioneHR), " · validata da HR il " & Text(recDettaglio.dataValidazioneHR, "dd/mm/yyyy hh:mm"), ""), "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "<div style='flex:1 1 210px;min-width:170px'><div style='font-size:11px;color:#605E5C'>Ultima azione di</div><div style='font-size:13px;font-weight:600'>" & Substitute(Substitute(Substitute(Coalesce(recDettaglio.ultimaModificaDa, "—"), "&", "&amp;"), "<", "&lt;"), ">", "&gt;") & "</div></div>" &
+                                      "</div>" &
+                                      "</div>"
+                                    FillPortions: =0
+                                    Height: =400
+                                    AutoHeight: =true
+                        - det_conAllegati:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + det_lblSezAllegati.Height + 8 + det_lblInfoAllegati.Height + 8 + det_conAllegatiRiga.Height + 8
+                              Visible: =IsBlank(locErrore)
+                            Children:
+                              - det_lblSezAllegati:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Allegati"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - det_lblInfoAllegati:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="I file si aprono per il coordinatore della richiesta e per l’Ufficio HR. Il lavoratore vede solo la conferma del caricamento."
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    AutoHeight: =true
+                                    Wrap: =true
+                                    FillPortions: =0
+                                    Height: =20
+                              - det_conAllegatiRiga:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Horizontal
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =8
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    LayoutWrap: =true
+                                    Height: =If(isMobile, 96, 48)
+                                    FillPortions: =0
+                                  Children:
+                                    - det_btnAttestato:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Apri attestato"
+                                          OnSelect: =Launch(recDettaglio.attestatoUrl)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =180
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =Color.White
+                                          Color: =colPrimario
+                                          HoverFill: =colPrimarioChiaro
+                                          PressedFill: =colPrimarioChiaro
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =1
+                                          Visible: =!IsBlank(recDettaglio.attestatoUrl) && (recPermessi.ruoloChiamante = "hr" || recPermessi.ruoloChiamante = "amministratore" || recDettaglio.coordinatoreLogin = recProfilo.login)
+                                    - det_lblAttestatoOk:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Attestato caricato ✓"
+                                          Size: =12
+                                          Color: =colSuccesso
+                                          FontWeight: =FontWeight.Semibold
+                                          Width: =200
+                                          Height: =40
+                                          Visible: =recDettaglio.attestatoPresente && !(recPermessi.ruoloChiamante = "hr" || recPermessi.ruoloChiamante = "amministratore" || recDettaglio.coordinatoreLogin = recProfilo.login)
+                                    - det_lblAttestatoNo:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Attestato non presente"
+                                          Size: =12
+                                          Color: =colAvviso
+                                          FontWeight: =FontWeight.Semibold
+                                          Width: =200
+                                          Height: =40
+                                          Visible: =!recDettaglio.attestatoPresente
+                                    - det_btnAltraDoc:
+                                        Control: Classic/Button@2.2.0
+                                        Properties:
+                                          Text: |-
+                                            ="Apri altra documentazione"
+                                          OnSelect: =Launch(recDettaglio.altraDocUrl)
+                                          Size: =12
+                                          FontWeight: =FontWeight.Semibold
+                                          Height: =40
+                                          Width: =240
+                                          FillPortions: =0
+                                          RadiusTopLeft: =6
+                                          RadiusTopRight: =6
+                                          RadiusBottomLeft: =6
+                                          RadiusBottomRight: =6
+                                          DisabledFill: =RGBA(200, 200, 200, 1)
+                                          DisabledColor: =RGBA(110, 110, 110, 1)
+                                          Fill: =Color.White
+                                          Color: =colPrimario
+                                          HoverFill: =colPrimarioChiaro
+                                          PressedFill: =colPrimarioChiaro
+                                          HoverColor: =colPrimario
+                                          BorderColor: =colPrimario
+                                          BorderThickness: =1
+                                          Visible: =!IsBlank(recDettaglio.altraDocUrl) && (recPermessi.ruoloChiamante = "hr" || recPermessi.ruoloChiamante = "amministratore" || recDettaglio.coordinatoreLogin = recProfilo.login)
+                                    - det_lblAltraDocOk:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Altra documentazione caricata ✓"
+                                          Size: =12
+                                          Color: =colSuccesso
+                                          Width: =260
+                                          Height: =40
+                                          Visible: =!IsBlank(recDettaglio.altraDocUrl) && !(recPermessi.ruoloChiamante = "hr" || recPermessi.ruoloChiamante = "amministratore" || recDettaglio.coordinatoreLogin = recProfilo.login)
+                        - det_conStorico:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =colSuperficie
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              PaddingTop: =12
+                              PaddingBottom: =12
+                              PaddingLeft: =16
+                              PaddingRight: =16
+                              RadiusTopLeft: =8
+                              RadiusTopRight: =8
+                              RadiusBottomLeft: =8
+                              RadiusBottomRight: =8
+                              FillPortions: =0
+                              Height: =18 + det_lblSezStorico.Height + 8 + If(det_conIntStorico.Visible, det_conIntStorico.Height + 8, 0) + det_galStorico.Height + 8
+                              Visible: =CountRows(colStorico) > 0
+                            Children:
+                              - det_lblSezStorico:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Storico delle modifiche"
+                                    Size: =14
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32
+                                    FillPortions: =0
+                                    VerticalAlign: =VerticalAlign.Bottom
+                              - det_conIntStorico:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    Fill: =colPrimarioChiaro
+                                    Height: =34
+                                    FillPortions: =0
+                                    Visible: =!isMobile
+                                  Children:
+                                    - det_lblIntStoricoData:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Data"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =8 + (Parent.Width - 32) * 0.0000
+                                          Y: =0
+                                          Width: =(Parent.Width - 32) * 0.1250 - 4
+                                          Height: =Parent.Height
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                    - det_lblIntStoricoAzione:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Azione"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =8 + (Parent.Width - 32) * 0.1250
+                                          Y: =0
+                                          Width: =(Parent.Width - 32) * 0.1667 - 4
+                                          Height: =Parent.Height
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                    - det_lblIntStoricoCampo:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Campo"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =8 + (Parent.Width - 32) * 0.2917
+                                          Y: =0
+                                          Width: =(Parent.Width - 32) * 0.1250 - 4
+                                          Height: =Parent.Height
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                    - det_lblIntStoricoValori:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Prima → dopo"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =8 + (Parent.Width - 32) * 0.4167
+                                          Y: =0
+                                          Width: =(Parent.Width - 32) * 0.1667 - 4
+                                          Height: =Parent.Height
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                    - det_lblIntStoricoRuolo:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Ruolo"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =8 + (Parent.Width - 32) * 0.5833
+                                          Y: =0
+                                          Width: =(Parent.Width - 32) * 0.0833 - 4
+                                          Height: =Parent.Height
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                    - det_lblIntStoricoAutore:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Autore"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =8 + (Parent.Width - 32) * 0.6667
+                                          Y: =0
+                                          Width: =(Parent.Width - 32) * 0.1667 - 4
+                                          Height: =Parent.Height
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                    - det_lblIntStoricoNota:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Nota"
+                                          Size: =10
+                                          Color: =colTestoSecondario
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =8 + (Parent.Width - 32) * 0.8333
+                                          Y: =0
+                                          Width: =(Parent.Width - 32) * 0.1667 - 4
+                                          Height: =Parent.Height
+                                          Align: =Align.Left
+                                          Wrap: =true
+                              - det_galStorico:
+                                  Control: Gallery@2.15.0
+                                  Variant: Vertical
+                                  Properties:
+                                    Items: =Sort(colStorico, data, SortOrder.Descending)
+                                    TemplateSize: =If(isMobile, 88, 44)
+                                    TemplatePadding: =0
+                                    ShowScrollbar: =true
+                                    BorderColor: =colBordo
+                                    BorderThickness: =1
+                                    Fill: =colSuperficie
+                                    OnSelect: =false
+                                    Height: =Min(10, Max(1, CountRows(colStorico))) * If(isMobile, 88, 44) + 2
+                                    FillPortions: =0
+                                  Children:
+                                    - det_lblStoricoData:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =Text(ThisItem.data, "dd/mm/yyyy hh:mm")
+                                          Size: =11
+                                          Color: =colTesto
+                                          X: =8 + (Parent.TemplateWidth - 16) * 0.0000
+                                          Y: =0
+                                          Width: =(Parent.TemplateWidth - 16) * 0.1250 - 4
+                                          Height: =Parent.TemplateHeight
+                                          Visible: =!isMobile
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                          OnSelect: =Select(Parent)
+                                    - det_lblStoricoAzione:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =ThisItem.azione
+                                          Size: =11
+                                          Color: =colTesto
+                                          X: =8 + (Parent.TemplateWidth - 16) * 0.1250
+                                          Y: =0
+                                          Width: =(Parent.TemplateWidth - 16) * 0.1667 - 4
+                                          Height: =Parent.TemplateHeight
+                                          Visible: =!isMobile
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                          OnSelect: =Select(Parent)
+                                    - det_lblStoricoCampo:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =ThisItem.campo
+                                          Size: =11
+                                          Color: =colTesto
+                                          X: =8 + (Parent.TemplateWidth - 16) * 0.2917
+                                          Y: =0
+                                          Width: =(Parent.TemplateWidth - 16) * 0.1250 - 4
+                                          Height: =Parent.TemplateHeight
+                                          Visible: =!isMobile
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                          OnSelect: =Select(Parent)
+                                    - det_lblStoricoValori:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =If(IsBlank(ThisItem.campo), "", Coalesce(ThisItem.valorePrecedente, "—") & " → " & Coalesce(ThisItem.valoreNuovo, "—"))
+                                          Size: =11
+                                          Color: =colTesto
+                                          X: =8 + (Parent.TemplateWidth - 16) * 0.4167
+                                          Y: =0
+                                          Width: =(Parent.TemplateWidth - 16) * 0.1667 - 4
+                                          Height: =Parent.TemplateHeight
+                                          Visible: =!isMobile
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                          OnSelect: =Select(Parent)
+                                    - det_lblStoricoRuolo:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =ThisItem.ruolo
+                                          Size: =11
+                                          Color: =colTesto
+                                          X: =8 + (Parent.TemplateWidth - 16) * 0.5833
+                                          Y: =0
+                                          Width: =(Parent.TemplateWidth - 16) * 0.0833 - 4
+                                          Height: =Parent.TemplateHeight
+                                          Visible: =!isMobile
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                          OnSelect: =Select(Parent)
+                                    - det_lblStoricoAutore:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =ThisItem.autore
+                                          Size: =11
+                                          Color: =colTesto
+                                          X: =8 + (Parent.TemplateWidth - 16) * 0.6667
+                                          Y: =0
+                                          Width: =(Parent.TemplateWidth - 16) * 0.1667 - 4
+                                          Height: =Parent.TemplateHeight
+                                          Visible: =!isMobile
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                          OnSelect: =Select(Parent)
+                                    - det_lblStoricoNota:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =ThisItem.nota
+                                          Size: =11
+                                          Color: =colTesto
+                                          X: =8 + (Parent.TemplateWidth - 16) * 0.8333
+                                          Y: =0
+                                          Width: =(Parent.TemplateWidth - 16) * 0.1667 - 4
+                                          Height: =Parent.TemplateHeight
+                                          Visible: =!isMobile
+                                          Align: =Align.Left
+                                          Wrap: =true
+                                          OnSelect: =Select(Parent)
+                                    - det_lblStoricoM1:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: =ThisItem.azione & " · " & Text(ThisItem.data, "dd/mm/yyyy hh:mm")
+                                          Size: =12
+                                          Color: =colTesto
+                                          FontWeight: =FontWeight.Semibold
+                                          X: =8
+                                          Y: =4
+                                          Width: =Parent.TemplateWidth - 16
+                                          Height: =32
+                                          Visible: =isMobile
+                                          OnSelect: =Select(Parent)
+                                    - det_lblStoricoM2:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            =ThisItem.ruolo & " " & ThisItem.autore & If(IsBlank(ThisItem.campo), "", " · " & ThisItem.campo & ": " & Coalesce(ThisItem.valorePrecedente, "—") & " → " & Coalesce(ThisItem.valoreNuovo, "—")) & If(IsBlank(ThisItem.nota), "", " · " & ThisItem.nota)
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          X: =8
+                                          Y: =36
+                                          Width: =Parent.TemplateWidth - 0 - 16
+                                          Height: =Parent.TemplateHeight - 40
+                                          Visible: =isMobile
+                                          Wrap: =true
+                                          VerticalAlign: =VerticalAlign.Top
+                                          OnSelect: =Select(Parent)
+                                    - det_rctStoricoSep:
+                                        Control: Rectangle@2.3.0
+                                        Properties:
+                                          Fill: =colBordo
+                                          Height: =1
+                                          X: =0
+                                          Y: =Parent.TemplateHeight - 1
+                                          Width: =Parent.TemplateWidth
+                        - det_btnIndietro:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              Text: |-
+                                ="Indietro"
+                              OnSelect: |-
+                                =If(
+                                    varDaLinkDiretto,
+                                    Set(varDaLinkDiretto, false);
+                                    Navigate(scrHome, ScreenTransition.None),
+                                    Back()
+                                )
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Height: =40
+                              Width: =160
+                              FillPortions: =0
+                              RadiusTopLeft: =6
+                              RadiusTopRight: =6
+                              RadiusBottomLeft: =6
+                              RadiusBottomRight: =6
+                              DisabledFill: =RGBA(200, 200, 200, 1)
+                              DisabledColor: =RGBA(110, 110, 110, 1)
+                              Fill: =Color.White
+                              Color: =colPrimario
+                              HoverFill: =colPrimarioChiaro
+                              PressedFill: =colPrimarioChiaro
+                              HoverColor: =colPrimario
+                              BorderColor: =colPrimario
+                              BorderThickness: =1
+      - det_conDialogo:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =!IsBlank(locDialogo)
+          Children:
+            - det_rctDialogoVelo:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =colVelo
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - det_conDialogoBox:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.Bold
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(520, Parent.Width - 32)
+                  Height: =If(det_txtDialogoNota.Visible, 380, 290)
+                  PaddingTop: =20
+                  PaddingBottom: =20
+                  PaddingLeft: =20
+                  PaddingRight: =20
+                  RadiusTopLeft: =8
+                  RadiusTopRight: =8
+                  RadiusBottomLeft: =8
+                  RadiusBottomRight: =8
+                Children:
+                  - det_lblDialogoTitolo:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          =Switch(
+                              locAzione,
+                              "approva", "Approva richiesta",
+                              "valida", "Valida richiesta",
+                              "respingi", "Respingi richiesta",
+                              "integrazione", "Richiedi integrazione",
+                              "Annulla richiesta"
+                          )
+                        Size: =16
+                        Color: =colPrimario
+                        FontWeight: =FontWeight.Semibold
+                        Height: =32
+                        FillPortions: =0
+                  - det_lblDialogoTesto:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          =Switch(
+                              locDialogo,
+                              "coord",
+                              Switch(
+                                  locAzione,
+                                  "approva", "Approvare la richiesta riconoscendo " & det_txtOreRetCoord.Text & " ore retribuite e " & det_txtOreGetCoord.Text & " ore gettone? Passerà all’Ufficio HR per la validazione.",
+                                  "respingi", "Respingere la richiesta? Il lavoratore riceverà la motivazione indicata.",
+                                  "Chiedere un’integrazione al lavoratore? Potrà correggere e reinviare la richiesta."
+                              ),
+                              "hr",
+                              Switch(
+                                  locAzione,
+                                  "valida", "Validare la richiesta con " & det_txtOreRetHR.Text & " ore retribuite e " & det_txtOreGetHR.Text & " ore gettone? Dopo la validazione non sarà più modificabile.",
+                                  "respingi", "Respingere la richiesta? Lavoratore e coordinatore riceveranno la motivazione.",
+                                  "Chiedere un’integrazione? La richiesta tornerà al lavoratore e poi di nuovo al coordinatore."
+                              ),
+                              "La richiesta " & recDettaglio.idRichiesta & " passerà allo stato «Annullata»."
+                          )
+                        Size: =12
+                        Color: =colTesto
+                        Wrap: =true
+                        FillPortions: =1
+                        VerticalAlign: =VerticalAlign.Top
+                        LayoutMinHeight: =60
+                  - det_txtDialogoNota:
+                      Control: Classic/TextInput@2.3.2
+                      Properties:
+                        Default: |-
+                          =""
+                        HintText: |-
+                          ="Motivazione"
+                        Size: =12
+                        BorderColor: =colBordo
+                        Height: =80
+                        FillPortions: =0
+                        RadiusTopLeft: =4
+                        RadiusTopRight: =4
+                        RadiusBottomLeft: =4
+                        RadiusBottomRight: =4
+                        Mode: =TextMode.MultiLine
+                        Visible: =false
+                  - det_conDialogoPulsanti:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutJustifyContent: =LayoutJustifyContent.End
+                        LayoutGap: =8
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(0, 0, 0, 0)
+                        Height: =44
+                        FillPortions: =0
+                      Children:
+                        - det_btnDialogoAnnulla:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              Text: |-
+                                ="Annulla"
+                              OnSelect: |-
+                                =UpdateContext({locDialogo: ""})
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Height: =40
+                              Width: =140
+                              FillPortions: =0
+                              RadiusTopLeft: =6
+                              RadiusTopRight: =6
+                              RadiusBottomLeft: =6
+                              RadiusBottomRight: =6
+                              DisabledFill: =RGBA(200, 200, 200, 1)
+                              DisabledColor: =RGBA(110, 110, 110, 1)
+                              Fill: =Color.White
+                              Color: =colPrimario
+                              HoverFill: =colPrimarioChiaro
+                              PressedFill: =colPrimarioChiaro
+                              HoverColor: =colPrimario
+                              BorderColor: =colPrimario
+                              BorderThickness: =1
+                        - det_btnDialogoConferma:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              Text: |-
+                                ="Conferma"
+                              OnSelect: |-
+                                =Switch(
+                                    locDialogo,
+                                    "coord",
+                                        Set(varCaricamento, true);
+                                        Set(varMessaggioCaricamento, "Registrazione dell’esito…");
+                                        With(
+                                            {r: IfError(
+                                                SDF_API06_EsitoCoordinatore.Run(
+                                                    varIdDettaglio,
+                                                    locAzione,
+                                                    Coalesce(Value(det_txtOreRetCoord.Text), 0),
+                                                    Coalesce(Value(det_txtOreGetCoord.Text), 0),
+                                                    Trim(det_txtNotaCoord.Text)
+                                                ),
+                                                {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                                            )},
+                                            If(
+                                                r.esito = "OK",
+                                                Notify(
+                                                    Switch(
+                                                        locAzione,
+                                                        "approva", "Richiesta approvata: è stata inoltrata all’Ufficio HR per la validazione.",
+                                                        "respingi", "Richiesta respinta: il lavoratore riceverà la motivazione.",
+                                                        "Integrazione richiesta: il lavoratore riceverà la tua nota e potrà correggere la richiesta."
+                                                    ),
+                                                    NotificationType.Success
+                                                );
+                                                UpdateContext({locDialogo: ""});
+                                                // aggiorna l'elenco del team (SDF_API05) e torna indietro
+                                                With(
+                                                    {rt: IfError(SDF_API05_RichiesteTeam.Run(varAnnoTeam, varMeseTeam), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                                    If(
+                                                        rt.esito = "OK",
+                                                        Set(varJsonTeam, rt.dati);
+                                                        Set(varTeamCaricato, true),
+                                                        Notify("Non è stato possibile caricare le richieste del team. " & rt.messaggio, NotificationType.Error)
+                                                    )
+                                                );
+                                                Set(varCaricamento, false);
+                                                If(varDaLinkDiretto, Set(varDaLinkDiretto, false); Navigate(scrTeam, ScreenTransition.None), Back()),
+                                                Notify(r.messaggio, NotificationType.Error)
+                                            )
+                                        );
+                                        Set(varCaricamento, false),
+                                    "hr",
+                                        Set(varCaricamento, true);
+                                        Set(varMessaggioCaricamento, "Registrazione della validazione…");
+                                        With(
+                                            {r: IfError(
+                                                SDF_API07_EsitoHR.Run(
+                                                    JSON(
+                                                        {
+                                                            azione: locAzione,
+                                                            nota: Trim(det_txtNotaHR.Text),
+                                                            richieste: Table(
+                                                                {
+                                                                    id: varIdDettaglio,
+                                                                    oreRetribuite: Coalesce(Value(det_txtOreRetHR.Text), 0),
+                                                                    oreGettone: Coalesce(Value(det_txtOreGetHR.Text), 0)
+                                                                }
+                                                            )
+                                                        },
+                                                        JSONFormat.IgnoreBinaryData
+                                                    )
+                                                ),
+                                                {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                                            )},
+                                            If(
+                                                r.esito = "OK",
+                                                With(
+                                                    {scartate: IfError(Concat(Table(ParseJSON(r.dati).scartate) As s, Text(s.Value.motivo), " · "), "")},
+                                                    If(
+                                                        IsBlank(scartate),
+                                                        Notify(
+                                                            Switch(locAzione, "valida", "Richiesta validata.", "respingi", "Richiesta respinta.", "Integrazione richiesta.") &
+                                                            " Lavoratore e coordinatore riceveranno una notifica.",
+                                                            NotificationType.Success
+                                                        );
+                                                        UpdateContext({locDialogo: ""});
+                                                        Refresh('Richieste formazione');
+                                                        Set(varCaricamento, false);
+                                                        If(varDaLinkDiretto, Set(varDaLinkDiretto, false); Navigate(scrValidazioneHR, ScreenTransition.None), Back()),
+                                                        Notify("Operazione non eseguita: " & scartate, NotificationType.Error)
+                                                    )
+                                                ),
+                                                Notify(r.messaggio, NotificationType.Error)
+                                            )
+                                        );
+                                        Set(varCaricamento, false),
+                                    "annulla",
+                                        Set(varCaricamento, true);
+                                        Set(varMessaggioCaricamento, "Annullamento in corso…");
+                                        With(
+                                            {r: IfError(
+                                                SDF_API03_SalvaRichiesta.Run(JSON({id: varIdDettaglio}, JSONFormat.IgnoreBinaryData), "annulla", "", "", "", ""),
+                                                {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"}
+                                            )},
+                                            If(
+                                                r.esito = "OK",
+                                                Notify("Richiesta annullata.", NotificationType.Success);
+                                                With(
+                                                    {rm: IfError(SDF_API02_MieRichieste.Run(0), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                                    If(
+                                                        rm.esito = "OK",
+                                                        Set(varJsonMieRichieste, rm.dati);
+                                                        Set(varMieCaricate, true),
+                                                        Notify("Non è stato possibile caricare le tue richieste. " & rm.messaggio, NotificationType.Error)
+                                                    )
+                                                );
+                                                UpdateContext({locDialogo: ""});
+                                                Set(varCaricamento, false);
+                                                Navigate(scrMieRichieste, ScreenTransition.None),
+                                                Notify(r.messaggio, NotificationType.Error)
+                                            )
+                                        );
+                                        Set(varCaricamento, false)
+                                )
+                              Size: =12
+                              FontWeight: =FontWeight.Semibold
+                              Height: =40
+                              Width: =180
+                              FillPortions: =0
+                              RadiusTopLeft: =6
+                              RadiusTopRight: =6
+                              RadiusBottomLeft: =6
+                              RadiusBottomRight: =6
+                              DisabledFill: =RGBA(200, 200, 200, 1)
+                              DisabledColor: =RGBA(110, 110, 110, 1)
+                              Fill: =Switch(locAzione, "approva", colSuccesso, "valida", colSuccesso, "integrazione", colAvviso, colErrore)
+                              Color: =Color.White
+                              HoverFill: =colPrimarioScuro
+                              PressedFill: =colPrimarioScuro
+                              BorderThickness: =0
+                              DisplayMode: =If(true, DisplayMode.Edit, DisplayMode.Disabled)
+      - det_conCaricamento:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =varCaricamento
+          Children:
+            - det_rctCaricamento:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =RGBA(255, 255, 255, 0.65)
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - det_lblCaricamento:
+                Control: Label@2.5.1
+                Properties:
+                  Text: =Coalesce(varMessaggioCaricamento, "Caricamento in corso…") & Char(10) & "Attendere qualche secondo."
+                  Size: =14
+                  Color: =colPrimario
+                  FontWeight: =FontWeight.Semibold
+                  Align: =Align.Center
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(360, Parent.Width - 32)
+                  Height: =96
+                  Wrap: =true
+                  BorderColor: =colBordo
+                  BorderThickness: =1

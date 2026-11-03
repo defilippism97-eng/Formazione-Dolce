@@ -1,0 +1,954 @@
+# =============================================================================
+#  Gestione ore formazione – Società Dolce · schermata scrTeam
+#  4 – Richieste del team (coordinatore)
+# -----------------------------------------------------------------------------
+#  Formato: sorgente YAML di Power Apps Studio (Copia codice / Incolla codice).
+#  Come incollarla: vedere powerapps/README.md. Le formule sono in notazione
+#  inglese (separatore "," e concatenazione ";"): Studio in italiano le mostra
+#  con ";" e ";;" automaticamente.
+#  Dati: SDF_API05_RichiesteTeam.
+# =============================================================================
+Screens:
+  scrTeam:
+    Properties:
+      Fill: =colSfondo
+      OnVisible: |-
+        =Set(varMenuAperto, false);
+        If(
+            !varTeamCaricato,
+            Set(varCaricamento, true);
+            Set(varMessaggioCaricamento, "Caricamento delle richieste del team…");
+            With(
+                {rt: IfError(SDF_API05_RichiesteTeam.Run(varAnnoTeam, varMeseTeam), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                If(
+                    rt.esito = "OK",
+                    Set(varJsonTeam, rt.dati);
+                    Set(varTeamCaricato, true),
+                    Notify("Non è stato possibile caricare le richieste del team. " & rt.messaggio, NotificationType.Error)
+                )
+            );
+            Set(varCaricamento, false)
+        )
+    Children:
+      - tea_conRadice:
+          Control: GroupContainer@1.3.0
+          Variant: AutoLayout
+          Properties:
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutJustifyContent: =LayoutJustifyContent.Start
+            LayoutGap: =0
+            DropShadow: =DropShadow.None
+            Fill: =colSfondo
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+          Children:
+            - tea_conHeader:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =12
+                  DropShadow: =DropShadow.None
+                  Fill: =colPrimario
+                  Height: =56
+                  FillPortions: =0
+                  PaddingLeft: =12
+                  PaddingRight: =16
+                Children:
+                  - tea_icoMenu:
+                      Control: Classic/Icon@2.5.0
+                      Properties:
+                        Icon: =Icon.Hamburger
+                        OnSelect: =Set(varMenuAperto, !varMenuAperto)
+                        Color: =Color.White
+                        Tooltip: |-
+                          ="Apri o chiudi il menu"
+                        Width: =40
+                        Height: =40
+                        PaddingTop: =4
+                        PaddingBottom: =4
+                        PaddingLeft: =4
+                        PaddingRight: =4
+                        FillPortions: =0
+                        Visible: =isMobile
+                  - tea_lblTitoloApp:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: |-
+                          ="Gestione ore formazione"
+                        Size: =16
+                        Color: =Color.White
+                        FontWeight: =FontWeight.Semibold
+                        FillPortions: =1
+                        Height: =40
+                        LayoutMinWidth: =150
+                  - tea_lblUtente:
+                      Control: Label@2.5.1
+                      Properties:
+                        Text: =User().FullName & If(haRuolo, " · " & ruoloApp, "")
+                        Size: =11
+                        Color: =Color.White
+                        Align: =Align.Right
+                        Width: =340
+                        Height: =40
+                        FillPortions: =0
+                        Visible: =!isMobile
+            - tea_conCorpo:
+                Control: GroupContainer@1.3.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutJustifyContent: =LayoutJustifyContent.Start
+                  LayoutGap: =0
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(0, 0, 0, 0)
+                  FillPortions: =1
+                Children:
+                  - tea_conMenu:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =0
+                        DropShadow: =DropShadow.None
+                        Fill: =colSuperficie
+                        Width: =If(isMobile, Parent.Width, 230)
+                        FillPortions: =0
+                        Visible: =!isMobile || varMenuAperto
+                        BorderColor: =colBordo
+                        BorderThickness: =1
+                        PaddingTop: =8
+                      Children:
+                        - tea_lblMenuUtente:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: =User().FullName & Char(10) & ruoloApp
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Visible: =isMobile
+                              Height: =48
+                              FillPortions: =0
+                              PaddingLeft: =12
+                              Wrap: =true
+                        - tea_galMenu:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: =tblMenu
+                              TemplateSize: =48
+                              TemplatePadding: =0
+                              ShowScrollbar: =false
+                              BorderColor: =colBordo
+                              BorderThickness: =0
+                              Fill: =RGBA(0, 0, 0, 0)
+                              TemplateFill: =If(ThisItem.Chiave = "team", colPrimarioChiaro, RGBA(0, 0, 0, 0))
+                              OnSelect: |-
+                                =Set(varMenuAperto, false);
+                                Switch(
+                                    ThisItem.Chiave,
+                                    "home", Navigate(scrHome, ScreenTransition.None),
+                                    "mie", Navigate(scrMieRichieste, ScreenTransition.None),
+                                    "nuova", Set(varIdModifica, 0); Navigate(scrRichiesta, ScreenTransition.None),
+                                    "team", Navigate(scrTeam, ScreenTransition.None),
+                                    "validazione", Navigate(scrValidazioneHR, ScreenTransition.None),
+                                    "riepilogo", Navigate(scrRiepilogo, ScreenTransition.None),
+                                    "chiusura", Navigate(scrChiusura, ScreenTransition.None),
+                                    "admin", Navigate(scrAdmin, ScreenTransition.None),
+                                    "profilo", Navigate(scrProfilo, ScreenTransition.None)
+                                )
+                              DisplayMode: =If(false, DisplayMode.Disabled, DisplayMode.Edit)
+                              FillPortions: =1
+                            Children:
+                              - tea_icoVoceMenu:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =ThisItem.Icona
+                                    OnSelect: =Select(Parent)
+                                    Color: =If(ThisItem.Chiave = "team", colPrimario, colTestoSecondario)
+                                    Tooltip: |-
+                                      =""
+                                    Width: =28
+                                    Height: =28
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =12
+                                    Y: =(Parent.TemplateHeight - Self.Height) / 2
+                              - tea_lblVoceMenu:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.Voce
+                                    Size: =12
+                                    Color: =If(ThisItem.Chiave = "team", colPrimario, colTesto)
+                                    FontWeight: =If(ThisItem.Chiave = "team", FontWeight.Semibold, FontWeight.Normal)
+                                    X: =48
+                                    Y: =0
+                                    Width: =Parent.TemplateWidth - 56
+                                    Height: =Parent.TemplateHeight
+                                    OnSelect: =Select(Parent)
+                              - tea_rctVoceAttiva:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colPrimario
+                                    Height: =Parent.TemplateHeight
+                                    X: =0
+                                    Y: =0
+                                    Width: =4
+                                    Visible: =ThisItem.Chiave = "team"
+                  - tea_conContenuto:
+                      Control: GroupContainer@1.3.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutAlignItems: =LayoutAlignItems.Stretch
+                        LayoutJustifyContent: =LayoutJustifyContent.Start
+                        LayoutGap: =12
+                        DropShadow: =DropShadow.None
+                        Fill: =colSfondo
+                        FillPortions: =1
+                        Visible: =!isMobile || !varMenuAperto
+                        PaddingTop: =16
+                        PaddingBottom: =16
+                        PaddingLeft: =If(isMobile, 12, 24)
+                        PaddingRight: =If(isMobile, 12, 24)
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                      Children:
+                        - tea_conTitolo:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =8
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              Height: =44
+                              FillPortions: =0
+                            Children:
+                              - tea_lblTitolo:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Richieste del team"
+                                    Size: =18
+                                    Color: =colPrimario
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =36
+                                    FillPortions: =1
+                              - tea_icoAggiorna:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.Reload
+                                    OnSelect: |-
+                                      =Set(varCaricamento, true);
+                                      Set(varMessaggioCaricamento, "Caricamento delle richieste del team…");
+                                      With(
+                                          {rt: IfError(SDF_API05_RichiesteTeam.Run(varAnnoTeam, varMeseTeam), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                          If(
+                                              rt.esito = "OK",
+                                              Set(varJsonTeam, rt.dati);
+                                              Set(varTeamCaricato, true),
+                                              Notify("Non è stato possibile caricare le richieste del team. " & rt.messaggio, NotificationType.Error)
+                                          )
+                                      );
+                                      Set(varCaricamento, false)
+                                    Color: =colPrimario
+                                    Tooltip: |-
+                                      ="Aggiorna"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    FillPortions: =0
+                        - tea_lblInfo:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Richieste dei lavoratori a te assegnati (le bozze non sono visibili). Scegli anno e mese per ricaricare; gli altri filtri agiscono subito."
+                              Size: =11
+                              Color: =colTestoSecondario
+                              AutoHeight: =true
+                              Wrap: =true
+                              FillPortions: =0
+                              Height: =20
+                        - tea_rigaFiltri1:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              FillPortions: =0
+                              Height: =If(isMobile, 76 + 76 + 76, 64)
+                            Children:
+                              - tea_conCampoAnno:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - tea_lblCampoAnno:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Anno"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - tea_ddAnno:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =tblAnni
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: =Text(varAnnoTeam)
+                                          OnChange: |-
+                                            =Set(varAnnoTeam, tea_ddAnno.Selected.Num);
+                                            Set(varMeseTeam, tea_ddMese.Selected.Num);
+                                            Set(varCaricamento, true);
+                                            Set(varMessaggioCaricamento, "Caricamento delle richieste del team…");
+                                            With(
+                                                {rt: IfError(SDF_API05_RichiesteTeam.Run(varAnnoTeam, varMeseTeam), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                                If(
+                                                    rt.esito = "OK",
+                                                    Set(varJsonTeam, rt.dati);
+                                                    Set(varTeamCaricato, true),
+                                                    Notify("Non è stato possibile caricare le richieste del team. " & rt.messaggio, NotificationType.Error)
+                                                )
+                                            );
+                                            Set(varCaricamento, false)
+                              - tea_conCampoMese:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - tea_lblCampoMese:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Mese"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - tea_ddMese:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =tblMesiFiltro
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: =LookUp(tblMesiFiltro, Num = varMeseTeam).Value
+                                          OnChange: |-
+                                            =Set(varAnnoTeam, tea_ddAnno.Selected.Num);
+                                            Set(varMeseTeam, tea_ddMese.Selected.Num);
+                                            Set(varCaricamento, true);
+                                            Set(varMessaggioCaricamento, "Caricamento delle richieste del team…");
+                                            With(
+                                                {rt: IfError(SDF_API05_RichiesteTeam.Run(varAnnoTeam, varMeseTeam), {esito: "ERRORE", messaggio: testoErroreRete, dati: "{}"})},
+                                                If(
+                                                    rt.esito = "OK",
+                                                    Set(varJsonTeam, rt.dati);
+                                                    Set(varTeamCaricato, true),
+                                                    Notify("Non è stato possibile caricare le richieste del team. " & rt.messaggio, NotificationType.Error)
+                                                )
+                                            );
+                                            Set(varCaricamento, false)
+                              - tea_conCampoLavoratore:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - tea_lblCampoLavoratore:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Lavoratore (vuoto = tutti)"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - tea_ddLavoratore:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =Sort(Distinct(colRichiesteTeam, nominativo), Value)
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            =""
+                                          AllowEmptySelection: =true
+                        - tea_rigaFiltri2:
+                            Control: GroupContainer@1.3.0
+                            Variant: AutoLayout
+                            Properties:
+                              LayoutDirection: =If(isMobile, LayoutDirection.Vertical, LayoutDirection.Horizontal)
+                              LayoutAlignItems: =LayoutAlignItems.Stretch
+                              LayoutJustifyContent: =LayoutJustifyContent.Start
+                              LayoutGap: =12
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(0, 0, 0, 0)
+                              FillPortions: =0
+                              Height: =If(isMobile, 76 + 76 + 76, 64)
+                            Children:
+                              - tea_conCampoServizio:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - tea_lblCampoServizio:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Servizio (vuoto = tutti)"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - tea_ddServizio:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =Sort(Distinct(colRichiesteTeam, servizio), Value)
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            =""
+                                          AllowEmptySelection: =true
+                              - tea_conCampoCdc:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - tea_lblCampoCdc:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Centro di costo (vuoto = tutti)"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - tea_ddCdc:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: =Sort(Distinct(colRichiesteTeam, centroDiCosto), Value)
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            =""
+                                          AllowEmptySelection: =true
+                              - tea_conCampoStato:
+                                  Control: GroupContainer@1.3.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutAlignItems: =LayoutAlignItems.Stretch
+                                    LayoutJustifyContent: =LayoutJustifyContent.Start
+                                    LayoutGap: =4
+                                    DropShadow: =DropShadow.None
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    FillPortions: =1
+                                    LayoutMinWidth: =200
+                                    Height: =64
+                                  Children:
+                                    - tea_lblCampoStato:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Text: |-
+                                            ="Stato (vuoto = tutti)"
+                                          Size: =11
+                                          Color: =colTestoSecondario
+                                          Height: =20
+                                          FillPortions: =0
+                                    - tea_ddStato:
+                                        Control: Classic/DropDown@2.3.1
+                                        Properties:
+                                          Items: |-
+                                            =ForAll(Filter(tblStati, Stato <> "Bozza"), {Value: Stato})
+                                          Size: =12
+                                          BorderColor: =colBordo
+                                          Height: =36
+                                          FillPortions: =0
+                                          ChevronBackground: =colPrimario
+                                          ChevronFill: =Color.White
+                                          Default: |-
+                                            =""
+                                          AllowEmptySelection: =true
+                        - tea_lblTotali:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                =CountRows(tea_galRichieste.AllItems) & " richieste · ore svolte " & Text(Sum(tea_galRichieste.AllItems, oreFrequentate), "[$-en-US]0.##") & " · richieste " & Text(Sum(tea_galRichieste.AllItems, oreRetribuiteRichieste), "[$-en-US]0.##") & " retr. + " & Text(Sum(tea_galRichieste.AllItems, oreGettoneRichieste), "[$-en-US]0.##") & " gett. · riconosciute " & Text(Sum(tea_galRichieste.AllItems, oreRetribuiteCoord), "[$-en-US]0.##") & " retr. + " & Text(Sum(tea_galRichieste.AllItems, oreGettoneCoord), "[$-en-US]0.##") & " gett."
+                              Size: =11
+                              Color: =colTestoSecondario
+                              Height: =36
+                              Wrap: =true
+                              FillPortions: =0
+                        - tea_conIntRichieste:
+                            Control: GroupContainer@1.3.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =colPrimarioChiaro
+                              Height: =34
+                              FillPortions: =0
+                              Visible: =!isMobile
+                            Children:
+                              - tea_lblIntRichiesteLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Lavoratore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.1500 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - tea_lblIntRichiesteCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Corso"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.1500
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.2000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - tea_lblIntRichiesteData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Data"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.3500
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.1000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - tea_lblIntRichiesteSvolte:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Ore formazione svolta"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.4500
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.1000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                              - tea_lblIntRichiesteRich:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Richieste retr. / gett."
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.5500
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.1000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                              - tea_lblIntRichiesteRic:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Riconosciute retr. / gett."
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.6500
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.1000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                              - tea_lblIntRichiesteStatoLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Stato lavoratore"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.7500
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.1000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Left
+                                    Wrap: =true
+                              - tea_lblIntRichiesteDup:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Dupl."
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.8500
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.0500 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                                    Wrap: =true
+                              - tea_lblIntRichiesteStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      ="Stato"
+                                    Size: =10
+                                    Color: =colTestoSecondario
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8 + (Parent.Width - 72) * 0.9000
+                                    Y: =0
+                                    Width: =(Parent.Width - 72) * 0.1000 - 4
+                                    Height: =Parent.Height
+                                    Align: =Align.Center
+                        - tea_galRichieste:
+                            Control: Gallery@2.15.0
+                            Variant: Vertical
+                            Properties:
+                              Items: |-
+                                =Sort(
+                                    Filter(
+                                        colRichiesteTeam,
+                                        IsBlank(tea_ddLavoratore.Selected.Value) || nominativo = tea_ddLavoratore.Selected.Value,
+                                        IsBlank(tea_ddServizio.Selected.Value) || servizio = tea_ddServizio.Selected.Value,
+                                        IsBlank(tea_ddCdc.Selected.Value) || centroDiCosto = tea_ddCdc.Selected.Value,
+                                        IsBlank(tea_ddStato.Selected.Value) || stato = tea_ddStato.Selected.Value
+                                    ),
+                                    dataSessione,
+                                    SortOrder.Descending
+                                )
+                              TemplateSize: =If(isMobile, 104, 52)
+                              TemplatePadding: =0
+                              ShowScrollbar: =true
+                              BorderColor: =colBordo
+                              BorderThickness: =1
+                              Fill: =colSuperficie
+                              OnSelect: =Set(varIdDettaglio, ThisItem.id); Set(varDaLinkDiretto, false); Navigate(scrDettaglio, ScreenTransition.None)
+                              FillPortions: =1
+                              LayoutMinHeight: =320
+                            Children:
+                              - tea_lblRichiesteLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.nominativo
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.0000
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.1500 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - tea_lblRichiesteCorso:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.titolo & Char(10) & ThisItem.codiceCorso
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.1500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.2000 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - tea_lblRichiesteData:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Text(ThisItem.dataSessione, "dd/mm/yyyy")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.3500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.1000 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - tea_lblRichiesteSvolte:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Text(ThisItem.oreFrequentate, "[$-en-US]0.##")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.4500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.1000 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - tea_lblRichiesteRich:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Text(ThisItem.oreRetribuiteRichieste, "[$-en-US]0.##") & " / " & Text(ThisItem.oreGettoneRichieste, "[$-en-US]0.##")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.5500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.1000 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - tea_lblRichiesteRic:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =Text(ThisItem.oreRetribuiteCoord, "[$-en-US]0.##") & " / " & Text(ThisItem.oreGettoneCoord, "[$-en-US]0.##")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.6500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.1000 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - tea_lblRichiesteStatoLav:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =Coalesce(LookUp(colLavoratoriTeam, login = ThisItem.lavoratoreLogin, stato), "—")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.7500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.1000 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Left
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - tea_lblRichiesteDup:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =If(ThisItem.possibileDuplicato, "⚠ sì", "")
+                                    Size: =11
+                                    Color: =colTesto
+                                    X: =8 + (Parent.TemplateWidth - 56) * 0.8500
+                                    Y: =0
+                                    Width: =(Parent.TemplateWidth - 56) * 0.0500 - 4
+                                    Height: =Parent.TemplateHeight
+                                    Visible: =!isMobile
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    OnSelect: =Select(Parent)
+                              - tea_lblRichiesteStato:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.stato
+                                    Size: =10
+                                    Color: =Color.White
+                                    FontWeight: =FontWeight.Semibold
+                                    Fill: =ThisItem.colore
+                                    Align: =Align.Center
+                                    Wrap: =true
+                                    X: =If(isMobile, Parent.TemplateWidth - Self.Width - 8, 8 + (Parent.TemplateWidth - 56) * 0.9000)
+                                    Y: =If(isMobile, 8, (Parent.TemplateHeight - Self.Height) / 2)
+                                    Width: =If(isMobile, 150, (Parent.TemplateWidth - 56) * 0.1000 - 4)
+                                    Height: =If(isMobile, 22, 34)
+                                    OnSelect: =Select(Parent)
+                              - tea_lblRichiesteM1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: =ThisItem.nominativo & If(ThisItem.possibileDuplicato, "  ⚠", "")
+                                    Size: =12
+                                    Color: =colTesto
+                                    FontWeight: =FontWeight.Semibold
+                                    X: =8
+                                    Y: =4
+                                    Width: =Parent.TemplateWidth - 170
+                                    Height: =32
+                                    Visible: =isMobile
+                                    OnSelect: =Select(Parent)
+                              - tea_lblRichiesteM2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Text: |-
+                                      =ThisItem.titolo & " · " & Text(ThisItem.dataSessione, "dd/mm/yyyy") & " · svolte " & Text(ThisItem.oreFrequentate, "[$-en-US]0.##") & " h · richieste " & Text(ThisItem.oreRetribuiteRichieste, "[$-en-US]0.##") & " / " & Text(ThisItem.oreGettoneRichieste, "[$-en-US]0.##") & " · riconosciute " & Text(ThisItem.oreRetribuiteCoord, "[$-en-US]0.##") & " / " & Text(ThisItem.oreGettoneCoord, "[$-en-US]0.##") & " · lavoratore " & Coalesce(LookUp(colLavoratoriTeam, login = ThisItem.lavoratoreLogin, stato), "—")
+                                    Size: =11
+                                    Color: =colTestoSecondario
+                                    X: =8
+                                    Y: =36
+                                    Width: =Parent.TemplateWidth - 40 - 16
+                                    Height: =Parent.TemplateHeight - 40
+                                    Visible: =isMobile
+                                    Wrap: =true
+                                    VerticalAlign: =VerticalAlign.Top
+                                    OnSelect: =Select(Parent)
+                              - tea_icoVedi:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    Icon: =Icon.View
+                                    OnSelect: =Select(Parent)
+                                    Color: =colPrimario
+                                    Tooltip: |-
+                                      ="Apri il dettaglio"
+                                    Width: =32
+                                    Height: =32
+                                    PaddingTop: =4
+                                    PaddingBottom: =4
+                                    PaddingLeft: =4
+                                    PaddingRight: =4
+                                    X: =Parent.TemplateWidth - 40 + 4
+                                    Y: =If(isMobile, Parent.TemplateHeight - Self.Height - 8, (Parent.TemplateHeight - Self.Height) / 2)
+                              - tea_rctRichiesteSep:
+                                  Control: Rectangle@2.3.0
+                                  Properties:
+                                    Fill: =colBordo
+                                    Height: =1
+                                    X: =0
+                                    Y: =Parent.TemplateHeight - 1
+                                    Width: =Parent.TemplateWidth
+                        - tea_lblVuoto:
+                            Control: Label@2.5.1
+                            Properties:
+                              Text: |-
+                                ="Nessuna richiesta del team per il periodo e i filtri scelti."
+                              Size: =12
+                              Color: =colTestoSecondario
+                              Height: =32
+                              FillPortions: =0
+                              Visible: =CountRows(tea_galRichieste.AllItems) = 0
+      - tea_conCaricamento:
+          Control: GroupContainer@1.3.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0)
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =Parent.Height
+            Visible: =varCaricamento
+          Children:
+            - tea_rctCaricamento:
+                Control: Rectangle@2.3.0
+                Properties:
+                  Fill: =RGBA(255, 255, 255, 0.65)
+                  Height: =Parent.Height
+                  X: =0
+                  Y: =0
+                  Width: =Parent.Width
+                  OnSelect: =false
+            - tea_lblCaricamento:
+                Control: Label@2.5.1
+                Properties:
+                  Text: =Coalesce(varMessaggioCaricamento, "Caricamento in corso…") & Char(10) & "Attendere qualche secondo."
+                  Size: =14
+                  Color: =colPrimario
+                  FontWeight: =FontWeight.Semibold
+                  Align: =Align.Center
+                  Fill: =colSuperficie
+                  X: =(Parent.Width - Self.Width) / 2
+                  Y: =(Parent.Height - Self.Height) / 2
+                  Width: =Min(360, Parent.Width - 32)
+                  Height: =96
+                  Wrap: =true
+                  BorderColor: =colBordo
+                  BorderThickness: =1
