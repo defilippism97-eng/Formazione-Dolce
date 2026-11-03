@@ -249,7 +249,7 @@ def audit(enabled: bool = True) -> dict:
     return {"Value": enabled, "CanBeChanged": True, "ManagedPropertyLogicalName": "canmodifyauditsettings"}
 
 
-def attribute_payload(dv: Dataverse, col: dict) -> dict:
+def attribute_payload(dv: Dataverse, col: dict, optionset_ids: dict[str, str] | None = None) -> dict:
     """Restituisce il payload AttributeMetadata per una colonna (non lookup)."""
     t = col["type"]
     base = {
@@ -331,7 +331,8 @@ def attribute_payload(dv: Dataverse, col: dict) -> dict:
             "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
             "AttributeType": "Picklist",
             "AttributeTypeName": {"Value": "PicklistType"},
-            "GlobalOptionSet@odata.bind": f"/GlobalOptionSetDefinitions(Name='{col['choice']}')",
+            "GlobalOptionSet@odata.bind": "/GlobalOptionSetDefinitions("
+                                          f"{(optionset_ids or {}).get(col['choice'], col['choice'])})",
         })
         if "default" in col:
             base["DefaultFormValue"] = col["default"]
@@ -391,6 +392,7 @@ class Provisioner:
         self._root_bu: str | None = None
         self._roles: dict[str, str] = {}
         self._profiles: dict[str, str] = {}
+        self._optionsets: dict[str, str] = {}
 
     # ---------------------------------------------------------------- utilità
     def root_bu(self) -> str:
@@ -403,6 +405,18 @@ class Provisioner:
                     raise DataverseError("Business unit radice non trovata")
                 self._root_bu = bu["businessunitid"]
         return self._root_bu
+
+    def optionset_id(self, name: str) -> str:
+        """MetadataId della scelta globale (necessario per il collegamento della colonna)."""
+        if name not in self._optionsets:
+            if self.dv.dry_run:
+                self._optionsets[name] = "00000000-0000-0000-0000-000000000000"
+            else:
+                res = self.dv.get(f"GlobalOptionSetDefinitions(Name='{name}')?$select=MetadataId")
+                if not res:
+                    raise DataverseError(f"Scelta globale {name} non trovata: eseguire prima il passo 'choices'")
+                self._optionsets[name] = res["MetadataId"]
+        return self._optionsets[name]
 
     def attr_exists(self, table: str, attr: str) -> bool:
         if self.dv.dry_run:
@@ -520,7 +534,9 @@ class Provisioner:
                     continue
                 if self.attr_exists(name, col["name"]):
                     continue
-                self.dv.post(f"EntityDefinitions(LogicalName='{name}')/Attributes", attribute_payload(self.dv, col))
+                payload = attribute_payload(self.dv, col, {col["choice"]: self.optionset_id(col["choice"])}
+                                            if col["type"] == "choice" else None)
+                self.dv.post(f"EntityDefinitions(LogicalName='{name}')/Attributes", payload)
                 created += 1
             ok(f"{name}: {created} colonne create")
 
