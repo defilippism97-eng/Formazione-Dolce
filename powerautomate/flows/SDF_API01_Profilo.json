@@ -1,0 +1,448 @@
+{
+  "name": "SDF_API01_Profilo",
+  "description": "API01 – Profilo dell'utente che apre l'app: ruoli (lavoratore, coordinatore, HR, amministratore), dati del lavoratore e completezza del profilo. Trigger Power Apps (V2), nessun parametro.",
+  "connectionReferences": {
+    "shared_sharepointonline": {
+      "connectionName": "shared-sharepointonl-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "tier": "NotSpecified"
+    },
+    "shared_office365": {
+      "connectionName": "shared-office365-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365",
+      "tier": "NotSpecified"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      },
+      "$authentication": {
+        "defaultValue": {},
+        "type": "SecureObject"
+      }
+    },
+    "triggers": {
+      "manual": {
+        "type": "Request",
+        "kind": "PowerAppV2",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        }
+      }
+    },
+    "actions": {
+      "Inizializza_SitoUrl": {
+        "type": "InitializeVariable",
+        "runAfter": {},
+        "inputs": {
+          "variables": [
+            {
+              "name": "SitoUrl",
+              "type": "string",
+              "value": "{{SITO_URL}}"
+            }
+          ]
+        }
+      },
+      "Chiamante": {
+        "description": "Identità di chi chiama, dall'intestazione della chiamata di Power Apps.",
+        "type": "Compose",
+        "runAfter": {
+          "Inizializza_SitoUrl": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@toLower(trim(coalesce(triggerOutputs()?['headers']?['x-ms-user-email'], '')))"
+      },
+      "Chiamante_OData": {
+        "type": "Compose",
+        "runAfter": {
+          "Chiamante": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@replace(outputs('Chiamante'), '''', '''''')"
+      },
+      "Leggi_configurazione": {
+        "description": "Legge i parametri della lista Configurazione.",
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Chiamante_OData": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "@variables('SitoUrl')",
+            "table": "Configurazione",
+            "$top": 500
+          },
+          "authentication": "@parameters('$authentication')"
+        }
+      },
+      "Seleziona_configurazione": {
+        "type": "Select",
+        "runAfter": {
+          "Leggi_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Leggi_configurazione')?['value']",
+          "select": {
+            "@item()?['Title']": "@item()?['Valore']"
+          }
+        }
+      },
+      "Configurazione": {
+        "description": "Oggetto chiave/valore: outputs('Configurazione')?['EmailHR'], ?['AppUrl'], ...",
+        "type": "Compose",
+        "runAfter": {
+          "Seleziona_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@json(replace(replace(replace(string(body('Seleziona_configurazione')),'[{','{'),'}]','}'),'},{',','))"
+      },
+      "Prova": {
+        "type": "Scope",
+        "runAfter": {
+          "Configurazione": [
+            "Succeeded"
+          ]
+        },
+        "actions": {
+          "Leggi_lavoratore": {
+            "description": "Elemento Lavoratori del chiamante (Login = chiamante).",
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Lavoratori",
+                "$filter": "Login eq '@{outputs('Chiamante_OData')}'",
+                "$top": 1
+              },
+              "authentication": "@parameters('$authentication')"
+            },
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Leggi_team_coordinatore": {
+            "description": "Almeno un lavoratore attivo assegnato al chiamante = ruolo coordinatore.",
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Lavoratori",
+                "$filter": "CoordinatoreLogin eq '@{outputs('Chiamante_OData')}' and StatoLavoratore eq 'Attivo'",
+                "$top": 1
+              },
+              "authentication": "@parameters('$authentication')"
+            },
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Leggi_ruoli_chiamante": {
+            "description": "Ruoli applicativi attivi del chiamante (Formazione HR / Amministratore).",
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Ruoli applicativi",
+                "$filter": "Title eq '@{outputs('Chiamante_OData')}' and Attivo eq 1",
+                "$top": 10
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Ruoli_chiamante": {
+            "type": "Select",
+            "runAfter": {
+              "Leggi_lavoratore": [
+                "Succeeded"
+              ],
+              "Leggi_team_coordinatore": [
+                "Succeeded"
+              ],
+              "Leggi_ruoli_chiamante": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_ruoli_chiamante')?['value']",
+              "select": "@item()?['Ruolo']?['Value']"
+            }
+          },
+          "Lavoratore": {
+            "type": "Compose",
+            "runAfter": {
+              "Ruoli_chiamante": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@first(body('Leggi_lavoratore')?['value'])"
+          },
+          "Lavoratore_attivo": {
+            "type": "Compose",
+            "runAfter": {
+              "Lavoratore": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@and(not(empty(outputs('Lavoratore'))), equals(outputs('Lavoratore')?['StatoLavoratore']?['Value'], 'Attivo'))"
+          },
+          "Oggetto_lavoratore": {
+            "description": "Dati del lavoratore restituiti all'app (mai il codice fiscale in chiaro).",
+            "type": "Compose",
+            "runAfter": {
+              "Lavoratore_attivo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "id": "@outputs('Lavoratore')?['ID']",
+              "cognome": "@coalesce(outputs('Lavoratore')?['Cognome'], '')",
+              "nome": "@coalesce(outputs('Lavoratore')?['Nome'], '')",
+              "emailAziendale": "@coalesce(outputs('Lavoratore')?['EmailAziendale'], '')",
+              "emailPersonale": "@coalesce(outputs('Lavoratore')?['EmailPersonale'], '')",
+              "cfRegistrato": "@equals(outputs('Lavoratore')?['CFRegistrato'], true)",
+              "cfMascherato": "@coalesce(outputs('Lavoratore')?['CFMascherato'], '')",
+              "area": "@coalesce(outputs('Lavoratore')?['Area']?['Value'], '')",
+              "servizio": "@coalesce(outputs('Lavoratore')?['Servizio'], '')",
+              "centroDiCosto": "@coalesce(outputs('Lavoratore')?['CentroDiCosto'], '')",
+              "strutturaId": "@coalesce(outputs('Lavoratore')?['StrutturaRif'], 0)",
+              "coordinatoreLogin": "@toLower(coalesce(outputs('Lavoratore')?['CoordinatoreLogin'], ''))",
+              "coordinatoreNome": "@coalesce(outputs('Lavoratore')?['CoordinatoreNome'], '')",
+              "coordinatoreEmail": "@coalesce(outputs('Lavoratore')?['CoordinatoreEmail'], '')",
+              "stato": "@coalesce(outputs('Lavoratore')?['StatoLavoratore']?['Value'], '')",
+              "segnalazioneAperta": "@equals(outputs('Lavoratore')?['SegnalazioneAperta'], true)"
+            }
+          },
+          "Dati_profilo": {
+            "type": "Compose",
+            "runAfter": {
+              "Oggetto_lavoratore": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "login": "@outputs('Chiamante')",
+              "nomeVisualizzato": "@if(empty(outputs('Lavoratore')), coalesce(first(body('Leggi_ruoli_chiamante')?['value'])?['Utente']?['DisplayName'], first(body('Leggi_team_coordinatore')?['value'])?['CoordinatoreNome'], outputs('Chiamante')), concat(coalesce(outputs('Lavoratore')?['Nome'], ''), ' ', coalesce(outputs('Lavoratore')?['Cognome'], '')))",
+              "ruoli": {
+                "lavoratore": "@outputs('Lavoratore_attivo')",
+                "coordinatore": "@not(empty(body('Leggi_team_coordinatore')?['value']))",
+                "hr": "@contains(body('Ruoli_chiamante'), 'Formazione HR')",
+                "amministratore": "@contains(body('Ruoli_chiamante'), 'Amministratore')"
+              },
+              "profiloCompleto": "@and(outputs('Lavoratore_attivo'), not(empty(trim(coalesce(outputs('Lavoratore')?['EmailPersonale'], '')))), equals(outputs('Lavoratore')?['CFRegistrato'], true))",
+              "lavoratore": "@if(outputs('Lavoratore_attivo'), outputs('Oggetto_lavoratore'), null)"
+            }
+          },
+          "Rispondi_profilo": {
+            "type": "Response",
+            "kind": "PowerApp",
+            "runAfter": {
+              "Dati_profilo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "statusCode": 200,
+              "body": {
+                "esito": "OK",
+                "messaggio": "",
+                "dati": "@string(outputs('Dati_profilo'))"
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "esito": {
+                    "title": "esito",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "messaggio": {
+                    "title": "messaggio",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "dati": {
+                    "title": "dati",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Errore": {
+        "description": "Eseguito solo se 'Prova' non riesce: risponde con un errore generico e avvisa HR.",
+        "type": "Scope",
+        "runAfter": {
+          "Prova": [
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "actions": {
+          "Rispondi_errore_imprevisto": {
+            "type": "Response",
+            "kind": "PowerApp",
+            "runAfter": {},
+            "inputs": {
+              "statusCode": 200,
+              "body": {
+                "esito": "ERRORE",
+                "messaggio": "Si è verificato un errore imprevisto. Riprova più tardi o contatta l'Ufficio HR/Formazione.",
+                "dati": "{}"
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "esito": {
+                    "title": "esito",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "messaggio": {
+                    "title": "messaggio",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "dati": {
+                    "title": "dati",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "Link_esecuzione": {
+            "type": "Compose",
+            "runAfter": {
+              "Rispondi_errore_imprevisto": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": "@concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])"
+          },
+          "Azioni_non_riuscite": {
+            "type": "Query",
+            "runAfter": {
+              "Link_esecuzione": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@result('Prova')",
+              "where": "@equals(item()?['status'], 'Failed')"
+            }
+          },
+          "Dettaglio_azioni_non_riuscite": {
+            "type": "Select",
+            "runAfter": {
+              "Azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Azioni_non_riuscite')",
+              "select": "@concat(item()?['name'], ': ', coalesce(item()?['error']?['message'], item()?['code'], ''))"
+            }
+          },
+          "Avvisa_HR_errore": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Dettaglio_azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_office365",
+                "operationId": "SendEmailV2",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+              },
+              "parameters": {
+                "emailMessage/To": "@{outputs('Configurazione')?['EmailHR']}",
+                "emailMessage/Subject": "Errore nel flusso @{workflow()?['tags']?['flowDisplayName']}",
+                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Errore in un flusso</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Un flusso dell'app non è stato completato. Apri l'esecuzione per i dettagli.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Flusso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{workflow()?['tags']?['flowDisplayName']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data e ora</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{convertFromUtc(utcNow(), 'W. Europe Standard Time', 'dd/MM/yyyy HH:mm')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Utente che ha chiamato</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Chiamante')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Azioni non riuscite</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(join(body('Dettaglio_azioni_non_riuscite'), ' | '), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr></table><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Link_esecuzione')}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'esecuzione</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                "emailMessage/Importance": "High"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Termina_con_errore": {
+            "type": "Terminate",
+            "runAfter": {
+              "Avvisa_HR_errore": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": {
+              "runStatus": "Failed",
+              "runError": {
+                "code": "ErroreFlusso",
+                "message": "Errore nel blocco Prova: vedere le azioni non riuscite."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

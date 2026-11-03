@@ -1,0 +1,927 @@
+{
+  "name": "SDF_F7_AllineaLavoratore",
+  "description": "F7 – Quando un elemento Lavoratori viene creato o modificato: completa login e dati del coordinatore; se cambia il coordinatore riassegna le richieste aperte, sposta gli allegati nella sua cartella e lo avvisa.",
+  "connectionReferences": {
+    "shared_sharepointonline": {
+      "connectionName": "shared-sharepointonl-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "tier": "NotSpecified"
+    },
+    "shared_office365": {
+      "connectionName": "shared-office365-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365",
+      "tier": "NotSpecified"
+    },
+    "shared_office365users": {
+      "connectionName": "shared-office365users-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+      "tier": "NotSpecified"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      },
+      "$authentication": {
+        "defaultValue": {},
+        "type": "SecureObject"
+      }
+    },
+    "triggers": {
+      "Quando_un_lavoratore_viene_creato_o_modificato": {
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 2
+        },
+        "splitOn": "@triggerBody()?['value']",
+        "type": "OpenApiConnection",
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetOnUpdatedItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "{{SITO_URL}}",
+            "table": "Lavoratori"
+          },
+          "authentication": "@parameters('$authentication')"
+        },
+        "runtimeConfiguration": {
+          "concurrency": {
+            "runs": 1
+          },
+          "secureData": {
+            "properties": [
+              "outputs"
+            ]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Inizializza_SitoUrl": {
+        "type": "InitializeVariable",
+        "runAfter": {},
+        "inputs": {
+          "variables": [
+            {
+              "name": "SitoUrl",
+              "type": "string",
+              "value": "{{SITO_URL}}"
+            }
+          ]
+        }
+      },
+      "Leggi_configurazione": {
+        "description": "Legge i parametri della lista Configurazione.",
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Inizializza_SitoUrl": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "@variables('SitoUrl')",
+            "table": "Configurazione",
+            "$top": 500
+          },
+          "authentication": "@parameters('$authentication')"
+        }
+      },
+      "Seleziona_configurazione": {
+        "type": "Select",
+        "runAfter": {
+          "Leggi_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Leggi_configurazione')?['value']",
+          "select": {
+            "@item()?['Title']": "@item()?['Valore']"
+          }
+        }
+      },
+      "Configurazione": {
+        "description": "Oggetto chiave/valore: outputs('Configurazione')?['EmailHR'], ?['AppUrl'], ...",
+        "type": "Compose",
+        "runAfter": {
+          "Seleziona_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@json(replace(replace(replace(string(body('Seleziona_configurazione')),'[{','{'),'}]','}'),'},{',','))"
+      },
+      "Inizializza_CoordNomeProfilo": {
+        "type": "InitializeVariable",
+        "runAfter": {
+          "Configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "variables": [
+            {
+              "name": "CoordNomeProfilo",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "Inizializza_CoordEmailProfilo": {
+        "type": "InitializeVariable",
+        "runAfter": {
+          "Inizializza_CoordNomeProfilo": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "variables": [
+            {
+              "name": "CoordEmailProfilo",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "Prova": {
+        "type": "Scope",
+        "runAfter": {
+          "Inizializza_CoordEmailProfilo": [
+            "Succeeded"
+          ]
+        },
+        "actions": {
+          "Percorso_allegati": {
+            "description": "Cartella radice della raccolta 'Allegati formazione'.",
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": "/AllegatiFormazione"
+          },
+          "Ottieni_modifiche_lavoratore": {
+            "description": "Colonne cambiate dall'inizio della finestra del trigger (ColumnHasChanged).",
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Percorso_allegati": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItemChanges",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Lavoratori",
+                "id": "@triggerBody()?['ID']",
+                "since": "@triggerOutputs()?['body/{TriggerWindowStartToken}']",
+                "includeDrafts": false
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Colonne_modificate": {
+            "type": "Compose",
+            "runAfter": {
+              "Ottieni_modifiche_lavoratore": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@coalesce(body('Ottieni_modifiche_lavoratore')?['ColumnHasChanged'], json('{}'))"
+          },
+          "Valori_attuali": {
+            "type": "Compose",
+            "runAfter": {
+              "Colonne_modificate": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "login": "@toLower(trim(coalesce(triggerBody()?['Login'], '')))",
+              "loginUtente": "@if(empty(triggerBody()?['UtenteM365']?['Claims']), '', toLower(trim(last(split(triggerBody()?['UtenteM365']?['Claims'], '|')))))",
+              "coordLogin": "@toLower(trim(coalesce(triggerBody()?['CoordinatoreLogin'], '')))",
+              "coordNome": "@coalesce(triggerBody()?['CoordinatoreNome'], '')",
+              "coordEmail": "@coalesce(triggerBody()?['CoordinatoreEmail'], '')",
+              "coordPersonaLogin": "@if(empty(triggerBody()?['Coordinatore']?['Claims']), '', toLower(trim(last(split(triggerBody()?['Coordinatore']?['Claims'], '|')))))",
+              "coordPersonaNome": "@coalesce(triggerBody()?['Coordinatore']?['DisplayName'], '')",
+              "coordPersonaEmail": "@toLower(coalesce(triggerBody()?['Coordinatore']?['Email'], ''))",
+              "personaCambiata": "@equals(outputs('Colonne_modificate')?['Coordinatore'], true)",
+              "loginTestoCambiato": "@equals(outputs('Colonne_modificate')?['CoordinatoreLogin'], true)"
+            }
+          },
+          "Login_desiderato": {
+            "description": "Se manca Login lo ricava da Utente Microsoft 365.",
+            "type": "Compose",
+            "runAfter": {
+              "Valori_attuali": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@if(empty(outputs('Valori_attuali')?['login']), outputs('Valori_attuali')?['loginUtente'], outputs('Valori_attuali')?['login'])"
+          },
+          "Login_coordinatore_desiderato": {
+            "description": "Dalla colonna persona Coordinatore se il login manca o se è cambiata solo la persona.",
+            "type": "Compose",
+            "runAfter": {
+              "Login_desiderato": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@if(and(not(empty(outputs('Valori_attuali')?['coordPersonaLogin'])), or(empty(outputs('Valori_attuali')?['coordLogin']), and(outputs('Valori_attuali')?['personaCambiata'], not(outputs('Valori_attuali')?['loginTestoCambiato'])))), outputs('Valori_attuali')?['coordPersonaLogin'], outputs('Valori_attuali')?['coordLogin'])"
+          },
+          "Coordinatore_cambiato": {
+            "type": "Compose",
+            "runAfter": {
+              "Login_coordinatore_desiderato": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@or(not(equals(outputs('Login_coordinatore_desiderato'), outputs('Valori_attuali')?['coordLogin'])), outputs('Valori_attuali')?['loginTestoCambiato'])"
+          },
+          "Coordinatore_da_persona": {
+            "type": "Compose",
+            "runAfter": {
+              "Coordinatore_cambiato": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@and(not(empty(outputs('Valori_attuali')?['coordPersonaLogin'])), equals(outputs('Login_coordinatore_desiderato'), outputs('Valori_attuali')?['coordPersonaLogin']))"
+          },
+          "Se_serve_profilo_coordinatore": {
+            "description": "Login coordinatore cambiato come testo (non dalla persona) o nome/e-mail mancanti.",
+            "type": "If",
+            "runAfter": {
+              "Coordinatore_da_persona": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@and(not(empty(outputs('Login_coordinatore_desiderato'))), not(outputs('Coordinatore_da_persona')), or(outputs('Coordinatore_cambiato'), empty(outputs('Valori_attuali')?['coordNome']), empty(outputs('Valori_attuali')?['coordEmail'])))",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Profilo_coordinatore": {
+                "description": "Nome ed e-mail del coordinatore da Office 365 Utenti.",
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_office365users",
+                    "operationId": "UserProfile_V2",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users"
+                  },
+                  "parameters": {
+                    "id": "@outputs('Login_coordinatore_desiderato')"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Imposta_nome_da_profilo": {
+                "type": "SetVariable",
+                "runAfter": {
+                  "Profilo_coordinatore": [
+                    "Succeeded",
+                    "Failed"
+                  ]
+                },
+                "inputs": {
+                  "name": "CoordNomeProfilo",
+                  "value": "@if(equals(actions('Profilo_coordinatore')?['status'], 'Succeeded'), coalesce(body('Profilo_coordinatore')?['displayName'], outputs('Login_coordinatore_desiderato')), outputs('Login_coordinatore_desiderato'))"
+                }
+              },
+              "Imposta_email_da_profilo": {
+                "type": "SetVariable",
+                "runAfter": {
+                  "Imposta_nome_da_profilo": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "name": "CoordEmailProfilo",
+                  "value": "@if(equals(actions('Profilo_coordinatore')?['status'], 'Succeeded'), toLower(coalesce(body('Profilo_coordinatore')?['mail'], outputs('Login_coordinatore_desiderato'))), outputs('Login_coordinatore_desiderato'))"
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Coordinatore_desiderato": {
+            "type": "Compose",
+            "runAfter": {
+              "Se_serve_profilo_coordinatore": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "login": "@outputs('Login_coordinatore_desiderato')",
+              "nome": "@if(empty(outputs('Login_coordinatore_desiderato')), outputs('Valori_attuali')?['coordNome'], if(outputs('Coordinatore_da_persona'), if(or(outputs('Coordinatore_cambiato'), empty(outputs('Valori_attuali')?['coordNome'])), outputs('Valori_attuali')?['coordPersonaNome'], outputs('Valori_attuali')?['coordNome']), if(empty(variables('CoordNomeProfilo')), outputs('Valori_attuali')?['coordNome'], variables('CoordNomeProfilo'))))",
+              "email": "@if(empty(outputs('Login_coordinatore_desiderato')), outputs('Valori_attuali')?['coordEmail'], if(outputs('Coordinatore_da_persona'), if(or(outputs('Coordinatore_cambiato'), empty(outputs('Valori_attuali')?['coordEmail'])), outputs('Valori_attuali')?['coordPersonaEmail'], outputs('Valori_attuali')?['coordEmail']), if(empty(variables('CoordEmailProfilo')), outputs('Valori_attuali')?['coordEmail'], variables('CoordEmailProfilo'))))"
+            }
+          },
+          "Se_lavoratore_da_aggiornare": {
+            "description": "Aggiorna solo se i valori sono diversi: evita i cicli del trigger.",
+            "type": "If",
+            "runAfter": {
+              "Coordinatore_desiderato": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@or(not(equals(outputs('Login_desiderato'), coalesce(triggerBody()?['Login'], ''))), not(equals(outputs('Coordinatore_desiderato')?['login'], coalesce(triggerBody()?['CoordinatoreLogin'], ''))), not(equals(outputs('Coordinatore_desiderato')?['nome'], outputs('Valori_attuali')?['coordNome'])), not(equals(outputs('Coordinatore_desiderato')?['email'], outputs('Valori_attuali')?['coordEmail'])))",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Aggiorna_lavoratore": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "PatchItem",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "table": "Lavoratori",
+                    "id": "@triggerBody()?['ID']",
+                    "item/Title": "@triggerBody()?['Title']",
+                    "item/Login": "@outputs('Login_desiderato')",
+                    "item/Cognome": "@triggerBody()?['Cognome']",
+                    "item/Nome": "@triggerBody()?['Nome']",
+                    "item/CoordinatoreLogin": "@outputs('Coordinatore_desiderato')?['login']",
+                    "item/CoordinatoreNome": "@outputs('Coordinatore_desiderato')?['nome']",
+                    "item/CoordinatoreEmail": "@outputs('Coordinatore_desiderato')?['email']"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                },
+                "runtimeConfiguration": {
+                  "secureData": {
+                    "properties": [
+                      "outputs"
+                    ]
+                  }
+                }
+              },
+              "Registro_allineamento_lavoratore": {
+                "type": "OpenApiConnection",
+                "runAfter": {
+                  "Aggiorna_lavoratore": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "PostItem",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "table": "Registro modifiche",
+                    "item/Title": "Allineamento dati lavoratore",
+                    "item/Tabella": "Lavoratori",
+                    "item/IdRecord": "@{string(triggerBody()?['ID'])}",
+                    "item/Ruolo/Value": "Sistema",
+                    "item/LoginAutore": "@coalesce(outputs('Configurazione')?['AccountServizio'], 'sistema')",
+                    "item/Nota": "@{concat('Login: ', outputs('Login_desiderato'), ' · coordinatore: ', outputs('Coordinatore_desiderato')?['login'], ' (', outputs('Coordinatore_desiderato')?['nome'], ', ', outputs('Coordinatore_desiderato')?['email'], ')')}"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Se_coordinatore_cambiato": {
+            "description": "Riassegna le richieste aperte, sposta gli allegati, avvisa il nuovo coordinatore.",
+            "type": "If",
+            "runAfter": {
+              "Se_lavoratore_da_aggiornare": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@and(outputs('Coordinatore_cambiato'), not(empty(outputs('Login_desiderato'))), not(empty(outputs('Coordinatore_desiderato')?['login'])))",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Leggi_richieste_aperte": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "GetItems",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "table": "Richieste formazione",
+                    "$filter": "LavoratoreLogin eq '@{replace(string(outputs('Login_desiderato')), '''', '''''')}' and (Stato eq 'Bozza' or Stato eq 'In attesa del coordinatore' or Stato eq 'Integrazione richiesta dal coordinatore' or Stato eq 'Integrazione richiesta da HR')",
+                    "$top": 5000
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Richieste_da_riassegnare": {
+                "description": "Solo quelle con un coordinatore diverso: evita i cicli.",
+                "type": "Query",
+                "runAfter": {
+                  "Leggi_richieste_aperte": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "from": "@body('Leggi_richieste_aperte')?['value']",
+                  "where": "@not(equals(toLower(coalesce(item()?['CoordinatoreLogin'], '')), outputs('Coordinatore_desiderato')?['login']))"
+                }
+              },
+              "Se_richieste_da_riassegnare": {
+                "type": "If",
+                "runAfter": {
+                  "Richieste_da_riassegnare": [
+                    "Succeeded"
+                  ]
+                },
+                "expression": {
+                  "and": [
+                    {
+                      "equals": [
+                        "@greater(length(body('Richieste_da_riassegnare')), 0)",
+                        true
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Cartella_nuovo_coordinatore": {
+                    "type": "Compose",
+                    "runAfter": {},
+                    "inputs": "@if(empty(outputs('Coordinatore_desiderato')?['login']), 'senza_coordinatore', replace(replace(toLower(trim(outputs('Coordinatore_desiderato')?['login'])), '@', '_'), '.', '_'))"
+                  },
+                  "Percorso_cartella_nuovo_coordinatore": {
+                    "type": "Compose",
+                    "runAfter": {
+                      "Cartella_nuovo_coordinatore": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": "@concat(outputs('Percorso_allegati'), '/', outputs('Cartella_nuovo_coordinatore'))"
+                  },
+                  "Verifica_cartella_nuovo_coordinatore": {
+                    "type": "OpenApiConnection",
+                    "runAfter": {
+                      "Percorso_cartella_nuovo_coordinatore": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "HttpRequest",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "@variables('SitoUrl')",
+                        "parameters/method": "GET",
+                        "parameters/uri": "_api/web/GetFolderByServerRelativeUrl('@{replace(concat(uriPath(variables('SitoUrl')), outputs('Percorso_cartella_nuovo_coordinatore')), '''', '''''')}')/Exists",
+                        "parameters/headers": {
+                          "Accept": "application/json;odata=nometadata",
+                          "Content-Type": "application/json;odata=nometadata"
+                        }
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    }
+                  },
+                  "Se_cartella_nuovo_coordinatore_da_creare": {
+                    "type": "If",
+                    "runAfter": {
+                      "Verifica_cartella_nuovo_coordinatore": [
+                        "Succeeded",
+                        "Failed"
+                      ]
+                    },
+                    "expression": {
+                      "and": [
+                        {
+                          "equals": [
+                            "@not(equals(body('Verifica_cartella_nuovo_coordinatore')?['value'], true))",
+                            true
+                          ]
+                        }
+                      ]
+                    },
+                    "actions": {
+                      "Crea_cartella_nuovo_coordinatore": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {},
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "CreateNewFolder",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@variables('SitoUrl')",
+                            "table": "Allegati formazione",
+                            "parameters/path": "@outputs('Cartella_nuovo_coordinatore')"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      },
+                      "Condividi_cartella_nuovo_coordinatore": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {
+                          "Crea_cartella_nuovo_coordinatore": [
+                            "Succeeded"
+                          ]
+                        },
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "GrantAccess",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@variables('SitoUrl')",
+                            "table": "Allegati formazione",
+                            "id": "@body('Crea_cartella_nuovo_coordinatore')?['ID']",
+                            "parameter/recipients": "@{if(empty(outputs('Coordinatore_desiderato')?['email']), outputs('Coordinatore_desiderato')?['login'], outputs('Coordinatore_desiderato')?['email'])}",
+                            "parameter/roleValue": "role:1073741826",
+                            "parameter/sendEmail": false
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      },
+                      "Registro_cartella_nuovo_coordinatore": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {
+                          "Condividi_cartella_nuovo_coordinatore": [
+                            "Succeeded"
+                          ]
+                        },
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "PostItem",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@variables('SitoUrl')",
+                            "table": "Registro modifiche",
+                            "item/Title": "Creazione cartella allegati",
+                            "item/Tabella": "Allegati formazione",
+                            "item/IdRecord": "@{string(body('Crea_cartella_nuovo_coordinatore')?['ID'])}",
+                            "item/Ruolo/Value": "Sistema",
+                            "item/LoginAutore": "@coalesce(outputs('Configurazione')?['AccountServizio'], 'sistema')",
+                            "item/Nota": "@{concat('Cartella ', outputs('Cartella_nuovo_coordinatore'), ' condivisa in lettura con ', if(empty(outputs('Coordinatore_desiderato')?['email']), outputs('Coordinatore_desiderato')?['login'], outputs('Coordinatore_desiderato')?['email']))}"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {}
+                    }
+                  },
+                  "Per_ogni_richiesta_da_riassegnare": {
+                    "type": "Foreach",
+                    "runAfter": {
+                      "Se_cartella_nuovo_coordinatore_da_creare": [
+                        "Succeeded"
+                      ]
+                    },
+                    "foreach": "@body('Richieste_da_riassegnare')",
+                    "actions": {
+                      "Cartella_precedente": {
+                        "type": "Compose",
+                        "runAfter": {},
+                        "inputs": "@if(empty(items('Per_ogni_richiesta_da_riassegnare')?['CoordinatoreLogin']), 'senza_coordinatore', replace(replace(toLower(trim(items('Per_ogni_richiesta_da_riassegnare')?['CoordinatoreLogin'])), '@', '_'), '.', '_'))"
+                      },
+                      "Leggi_allegati_richiesta": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {
+                          "Cartella_precedente": [
+                            "Succeeded"
+                          ]
+                        },
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "GetItems",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@variables('SitoUrl')",
+                            "table": "Allegati formazione",
+                            "$filter": "RichiestaRif eq @{items('Per_ogni_richiesta_da_riassegnare')?['ID']}",
+                            "$top": 100
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      },
+                      "Per_ogni_allegato": {
+                        "type": "Foreach",
+                        "runAfter": {
+                          "Leggi_allegati_richiesta": [
+                            "Succeeded"
+                          ]
+                        },
+                        "foreach": "@body('Leggi_allegati_richiesta')?['value']",
+                        "actions": {
+                          "Sposta_allegato": {
+                            "description": "Sposta il file nella cartella del nuovo coordinatore (sovrascrive).",
+                            "type": "OpenApiConnection",
+                            "runAfter": {},
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@variables('SitoUrl')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/GetFileByServerRelativeUrl(@f)/moveto(newurl=@n,flags=1)?@f='@{encodeUriComponent(replace(concat(uriPath(variables('SitoUrl')), '/', items('Per_ogni_allegato')?['{FullPath}']), '''', ''''''))}'&@n='@{encodeUriComponent(replace(concat(uriPath(variables('SitoUrl')), outputs('Percorso_cartella_nuovo_coordinatore'), '/', items('Per_ogni_allegato')?['{FilenameWithExtension}']), '''', ''''''))}'",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata",
+                                  "Content-Type": "application/json;odata=nometadata"
+                                }
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            }
+                          }
+                        },
+                        "runtimeConfiguration": {
+                          "concurrency": {
+                            "repetitions": 1
+                          }
+                        }
+                      },
+                      "Riassegna_richiesta": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {
+                          "Per_ogni_allegato": [
+                            "Succeeded"
+                          ]
+                        },
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "PatchItem",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@variables('SitoUrl')",
+                            "table": "Richieste formazione",
+                            "id": "@items('Per_ogni_richiesta_da_riassegnare')?['ID']",
+                            "item/Title": "@items('Per_ogni_richiesta_da_riassegnare')?['Title']",
+                            "item/CoordinatoreLogin": "@outputs('Coordinatore_desiderato')?['login']",
+                            "item/CoordinatoreNome": "@outputs('Coordinatore_desiderato')?['nome']",
+                            "item/CoordinatoreEmail": "@outputs('Coordinatore_desiderato')?['email']",
+                            "item/AttestatoUrl": "@replace(coalesce(items('Per_ogni_richiesta_da_riassegnare')?['AttestatoUrl'], ''), concat('/', outputs('Cartella_precedente'), '/'), concat('/', outputs('Cartella_nuovo_coordinatore'), '/'))",
+                            "item/AltraDocUrl": "@replace(coalesce(items('Per_ogni_richiesta_da_riassegnare')?['AltraDocUrl'], ''), concat('/', outputs('Cartella_precedente'), '/'), concat('/', outputs('Cartella_nuovo_coordinatore'), '/'))",
+                            "item/UltimaModificaDa": "@coalesce(outputs('Configurazione')?['AccountServizio'], 'sistema')"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      },
+                      "Registro_cambio_coordinatore": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {
+                          "Riassegna_richiesta": [
+                            "Succeeded"
+                          ]
+                        },
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "PostItem",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@variables('SitoUrl')",
+                            "table": "Registro modifiche",
+                            "item/Title": "Cambio coordinatore",
+                            "item/RichiestaRif": "@items('Per_ogni_richiesta_da_riassegnare')?['ID']",
+                            "item/IdRichiesta": "@{items('Per_ogni_richiesta_da_riassegnare')?['Title']}",
+                            "item/Tabella": "Richieste formazione",
+                            "item/IdRecord": "@{string(items('Per_ogni_richiesta_da_riassegnare')?['ID'])}",
+                            "item/Campo": "CoordinatoreLogin",
+                            "item/ValorePrecedente": "@{coalesce(items('Per_ogni_richiesta_da_riassegnare')?['CoordinatoreLogin'], '')}",
+                            "item/ValoreNuovo": "@{outputs('Coordinatore_desiderato')?['login']}",
+                            "item/Ruolo/Value": "Sistema",
+                            "item/LoginAutore": "@coalesce(outputs('Configurazione')?['AccountServizio'], 'sistema')",
+                            "item/Nota": "Richiesta aperta riassegnata; allegati spostati nella cartella del nuovo coordinatore."
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "concurrency": {
+                        "repetitions": 5
+                      }
+                    }
+                  },
+                  "Richieste_riassegnate_in_attesa": {
+                    "type": "Query",
+                    "runAfter": {
+                      "Per_ogni_richiesta_da_riassegnare": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "from": "@body('Richieste_da_riassegnare')",
+                      "where": "@equals(item()?['Stato']?['Value'], 'In attesa del coordinatore')"
+                    }
+                  },
+                  "Se_avvisare_nuovo_coordinatore": {
+                    "type": "If",
+                    "runAfter": {
+                      "Richieste_riassegnate_in_attesa": [
+                        "Succeeded"
+                      ]
+                    },
+                    "expression": {
+                      "and": [
+                        {
+                          "equals": [
+                            "@greater(length(body('Richieste_riassegnate_in_attesa')), 0)",
+                            true
+                          ]
+                        }
+                      ]
+                    },
+                    "actions": {
+                      "Righe_richieste_riassegnate": {
+                        "type": "Select",
+                        "runAfter": {},
+                        "inputs": {
+                          "from": "@body('Richieste_riassegnate_in_attesa')",
+                          "select": "@concat('<tr><td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', item()?['Title'], '</td><td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', replace(replace(replace(string(coalesce(concat(item()?['Cognome'], ' ', item()?['Nome']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '</td><td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', replace(replace(replace(string(coalesce(if(empty(item()?['TitoloCorsoCatalogo']), coalesce(item()?['TitoloCorsoLibero'], ''), item()?['TitoloCorsoCatalogo']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '</td><td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', if(empty(item()?['DataSessione']), '', formatDateTime(if(empty(item()?['DataSessione']), null, if(equals(length(string(item()?['DataSessione'])), 10), string(item()?['DataSessione']), convertFromUtc(string(item()?['DataSessione']), 'W. Europe Standard Time', 'yyyy-MM-dd'))), 'dd/MM/yyyy')), '</td><td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', formatNumber(float(coalesce(item()?['OreRetribuiteRichieste'], 0)), '0.##', 'it-IT'), '</td></tr>')"
+                        }
+                      },
+                      "Email_nuovo_coordinatore": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {
+                          "Righe_richieste_riassegnate": [
+                            "Succeeded"
+                          ]
+                        },
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_office365",
+                            "operationId": "SendEmailV2",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                          },
+                          "parameters": {
+                            "emailMessage/To": "@{if(empty(outputs('Coordinatore_desiderato')?['email']), outputs('Coordinatore_desiderato')?['login'], outputs('Coordinatore_desiderato')?['email'])}",
+                            "emailMessage/Subject": "Richieste di formazione assegnate a te – @{concat(triggerBody()?['Cognome'], ' ', triggerBody()?['Nome'])}",
+                            "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Nuove richieste da approvare</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Sei ora il coordinatore di <b>@{replace(replace(replace(string(coalesce(concat(triggerBody()?['Nome'], ' ', triggerBody()?['Cognome']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</b>. Le richieste qui sotto sono in attesa della tua approvazione.</p><table style=\"border-collapse:collapse;width:100%;font-size:13px;margin:0 0 16px 0\"><tr><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Richiesta</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Lavoratore</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Corso</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Data</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Ore retribuite richieste</th></tr>@{join(body('Righe_richieste_riassegnate'), '')}</table><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Configurazione')?['AppUrl']}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'app</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                            "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                            "emailMessage/Importance": "Normal"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {}
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {}
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          }
+        }
+      },
+      "Errore": {
+        "description": "Eseguito solo se 'Prova' non riesce: risponde con un errore generico e avvisa HR.",
+        "type": "Scope",
+        "runAfter": {
+          "Prova": [
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "actions": {
+          "Link_esecuzione": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": "@concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])"
+          },
+          "Azioni_non_riuscite": {
+            "type": "Query",
+            "runAfter": {
+              "Link_esecuzione": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@result('Prova')",
+              "where": "@equals(item()?['status'], 'Failed')"
+            }
+          },
+          "Dettaglio_azioni_non_riuscite": {
+            "type": "Select",
+            "runAfter": {
+              "Azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Azioni_non_riuscite')",
+              "select": "@concat(item()?['name'], ': ', coalesce(item()?['error']?['message'], item()?['code'], ''))"
+            }
+          },
+          "Avvisa_HR_errore": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Dettaglio_azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_office365",
+                "operationId": "SendEmailV2",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+              },
+              "parameters": {
+                "emailMessage/To": "@{outputs('Configurazione')?['EmailHR']}",
+                "emailMessage/Subject": "Errore nel flusso @{workflow()?['tags']?['flowDisplayName']}",
+                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Errore in un flusso</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Un flusso dell'app non è stato completato. Apri l'esecuzione per i dettagli.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Flusso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{workflow()?['tags']?['flowDisplayName']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data e ora</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{convertFromUtc(utcNow(), 'W. Europe Standard Time', 'dd/MM/yyyy HH:mm')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Azioni non riuscite</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(join(body('Dettaglio_azioni_non_riuscite'), ' | '), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr></table><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Link_esecuzione')}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'esecuzione</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                "emailMessage/Importance": "High"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Termina_con_errore": {
+            "type": "Terminate",
+            "runAfter": {
+              "Avvisa_HR_errore": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": {
+              "runStatus": "Failed",
+              "runError": {
+                "code": "ErroreFlusso",
+                "message": "Errore nel blocco Prova: vedere le azioni non riuscite."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

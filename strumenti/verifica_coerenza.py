@@ -124,12 +124,16 @@ def verifica_flussi() -> set[str]:
                 err(f"{nome}: riferimento a un'azione inesistente '{rif}'")
         for rif in set(re.findall(r"variables\('([^']+)'\)", testo)):
             if not any(az.get("type") == "InitializeVariable" and
-                       any(v.get("name") == rif for v in az.get("inputs", {}).get("variables", []))
+                       isinstance(az.get("inputs"), dict) and
+                       any(v.get("name") == rif for v in az["inputs"].get("variables", []))
                        for az in tutte.values()):
                 err(f"{nome}: variabile non inizializzata '{rif}'")
         # colonne e stati nelle azioni SharePoint
         for an, az, _ in azioni_ricorsive(definizione.get("actions", {})):
-            params = (az.get("inputs") or {}).get("parameters") or {}
+            inputs = az.get("inputs")
+            params = inputs.get("parameters") if isinstance(inputs, dict) else None
+            if not isinstance(params, dict):
+                continue
             tabella = params.get("table")
             if isinstance(tabella, str) and tabella in LISTE:
                 for k, v in params.items():

@@ -1,0 +1,1030 @@
+{
+  "name": "SDF_API09_FilePaghe",
+  "description": "API09 – Genera il CSV paghe del periodo chiuso (requisito Flusso 6), lo salva in File paghe, risponde con l'URL, porta le richieste a Inviata a Payroll e invia il collegamento ai destinatari. Parametri: anno, mese.",
+  "connectionReferences": {
+    "shared_sharepointonline": {
+      "connectionName": "shared-sharepointonl-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "tier": "NotSpecified"
+    },
+    "shared_office365": {
+      "connectionName": "shared-office365-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365",
+      "tier": "NotSpecified"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      },
+      "$authentication": {
+        "defaultValue": {},
+        "type": "SecureObject"
+      }
+    },
+    "triggers": {
+      "manual": {
+        "type": "Request",
+        "kind": "PowerAppV2",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "number": {
+                "title": "anno",
+                "type": "number",
+                "x-ms-dynamically-added": true,
+                "description": "Anno del periodo",
+                "x-ms-content-hint": "NUMBER"
+              },
+              "number_1": {
+                "title": "mese",
+                "type": "number",
+                "x-ms-dynamically-added": true,
+                "description": "Mese del periodo (1-12)",
+                "x-ms-content-hint": "NUMBER"
+              }
+            },
+            "required": [
+              "number",
+              "number_1"
+            ]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Inizializza_SitoUrl": {
+        "type": "InitializeVariable",
+        "runAfter": {},
+        "inputs": {
+          "variables": [
+            {
+              "name": "SitoUrl",
+              "type": "string",
+              "value": "{{SITO_URL}}"
+            }
+          ]
+        }
+      },
+      "Chiamante": {
+        "description": "Identità di chi chiama, dall'intestazione della chiamata di Power Apps.",
+        "type": "Compose",
+        "runAfter": {
+          "Inizializza_SitoUrl": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@toLower(trim(coalesce(triggerOutputs()?['headers']?['x-ms-user-email'], '')))"
+      },
+      "Chiamante_OData": {
+        "type": "Compose",
+        "runAfter": {
+          "Chiamante": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@replace(outputs('Chiamante'), '''', '''''')"
+      },
+      "Leggi_configurazione": {
+        "description": "Legge i parametri della lista Configurazione.",
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Chiamante_OData": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "@variables('SitoUrl')",
+            "table": "Configurazione",
+            "$top": 500
+          },
+          "authentication": "@parameters('$authentication')"
+        }
+      },
+      "Seleziona_configurazione": {
+        "type": "Select",
+        "runAfter": {
+          "Leggi_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Leggi_configurazione')?['value']",
+          "select": {
+            "@item()?['Title']": "@item()?['Valore']"
+          }
+        }
+      },
+      "Configurazione": {
+        "description": "Oggetto chiave/valore: outputs('Configurazione')?['EmailHR'], ?['AppUrl'], ...",
+        "type": "Compose",
+        "runAfter": {
+          "Seleziona_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@json(replace(replace(replace(string(body('Seleziona_configurazione')),'[{','{'),'}]','}'),'},{',','))"
+      },
+      "Prova": {
+        "type": "Scope",
+        "runAfter": {
+          "Configurazione": [
+            "Succeeded"
+          ]
+        },
+        "actions": {
+          "Percorso_file_paghe": {
+            "description": "Cartella radice della raccolta 'File paghe' (URL relativo al sito).",
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": "/FilePaghe"
+          },
+          "Anno": {
+            "type": "Compose",
+            "runAfter": {
+              "Percorso_file_paghe": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@int(triggerBody()?['number'])"
+          },
+          "Mese": {
+            "type": "Compose",
+            "runAfter": {
+              "Anno": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@int(triggerBody()?['number_1'])"
+          },
+          "Periodo": {
+            "type": "Compose",
+            "runAfter": {
+              "Mese": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@concat(string(outputs('Anno')), '-', formatNumber(outputs('Mese'), '00'))"
+          },
+          "Leggi_ruoli_chiamante": {
+            "description": "Ruoli applicativi attivi del chiamante.",
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Periodo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Ruoli applicativi",
+                "$filter": "Title eq '@{outputs('Chiamante_OData')}' and Attivo eq 1",
+                "$top": 10
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Leggi_chiusura": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Periodo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Chiusure mensili",
+                "$filter": "Title eq '@{outputs('Periodo')}'",
+                "$top": 1
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Leggi_richieste_da_inviare": {
+            "description": "Richieste del periodo Incluse nel riepilogo mensile (non ancora inviate).",
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Periodo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Richieste formazione",
+                "$filter": "AnnoCompetenza eq @{string(outputs('Anno'))} and MeseCompetenza eq @{string(outputs('Mese'))} and Stato eq 'Inclusa nel riepilogo mensile'",
+                "$top": 5000
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Ruoli_chiamante": {
+            "type": "Select",
+            "runAfter": {
+              "Leggi_ruoli_chiamante": [
+                "Succeeded"
+              ],
+              "Leggi_chiusura": [
+                "Succeeded"
+              ],
+              "Leggi_richieste_da_inviare": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_ruoli_chiamante')?['value']",
+              "select": "@item()?['Ruolo']?['Value']"
+            }
+          },
+          "Chiusura": {
+            "type": "Compose",
+            "runAfter": {
+              "Ruoli_chiamante": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@first(body('Leggi_chiusura')?['value'])"
+          },
+          "Controlli_file_paghe": {
+            "type": "Compose",
+            "runAfter": {
+              "Chiusura": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@if(not(or(contains(body('Ruoli_chiamante'), 'Formazione HR'), contains(body('Ruoli_chiamante'), 'Amministratore'))), 'Operazione riservata all''Ufficio HR/Formazione e agli amministratori.', if(or(less(outputs('Mese'), 1), greater(outputs('Mese'), 12)), 'Periodo non valido.', if(or(empty(outputs('Chiusura')), not(equals(outputs('Chiusura')?['StatoPeriodo']?['Value'], 'Chiuso'))), concat('Il periodo ', outputs('Periodo'), ' non è chiuso: chiudi il mese prima di generare il file paghe.'), '')))"
+          },
+          "Se_controlli_non_superati": {
+            "type": "If",
+            "runAfter": {
+              "Controlli_file_paghe": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@not(empty(outputs('Controlli_file_paghe')))",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Rispondi_controlli_non_superati": {
+                "type": "Response",
+                "kind": "PowerApp",
+                "runAfter": {},
+                "inputs": {
+                  "statusCode": 200,
+                  "body": {
+                    "esito": "ERRORE",
+                    "messaggio": "@{outputs('Controlli_file_paghe')}",
+                    "dati": "{}"
+                  },
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "esito": {
+                        "title": "esito",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "messaggio": {
+                        "title": "messaggio",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "dati": {
+                        "title": "dati",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "Termina_controlli_non_superati": {
+                "type": "Terminate",
+                "runAfter": {
+                  "Rispondi_controlli_non_superati": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "runStatus": "Succeeded"
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Se_nessuna_richiesta": {
+            "type": "If",
+            "runAfter": {
+              "Se_controlli_non_superati": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@not(empty(if(equals(length(body('Leggi_richieste_da_inviare')?['value']), 0), 'Nessuna richiesta da inviare per il periodo.', '')))",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Rispondi_nessuna_richiesta": {
+                "type": "Response",
+                "kind": "PowerApp",
+                "runAfter": {},
+                "inputs": {
+                  "statusCode": 200,
+                  "body": {
+                    "esito": "ERRORE",
+                    "messaggio": "@{if(equals(length(body('Leggi_richieste_da_inviare')?['value']), 0), 'Nessuna richiesta da inviare per il periodo.', '')}",
+                    "dati": "{}"
+                  },
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "esito": {
+                        "title": "esito",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "messaggio": {
+                        "title": "messaggio",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "dati": {
+                        "title": "dati",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "Termina_nessuna_richiesta": {
+                "type": "Terminate",
+                "runAfter": {
+                  "Rispondi_nessuna_richiesta": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "runStatus": "Succeeded"
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Ruolo_registro": {
+            "type": "Compose",
+            "runAfter": {
+              "Se_nessuna_richiesta": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@if(contains(body('Ruoli_chiamante'), 'Formazione HR'), 'Formazione HR', 'Amministratore')"
+          },
+          "Riferimenti_lavoratori": {
+            "type": "Select",
+            "runAfter": {
+              "Ruolo_registro": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_richieste_da_inviare')?['value']",
+              "select": "@coalesce(item()?['LavoratoreRif'], 0)"
+            }
+          },
+          "Leggi_lavoratori": {
+            "description": "Lavoratori nell'intervallo di ID delle richieste (ID è sempre indicizzato).",
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Riferimenti_lavoratori": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Lavoratori",
+                "$filter": "ID ge @{formatNumber(min(body('Riferimenti_lavoratori')), '0', 'en-US')} and ID le @{formatNumber(max(body('Riferimenti_lavoratori')), '0', 'en-US')}",
+                "$top": 5000
+              },
+              "authentication": "@parameters('$authentication')"
+            },
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Coppie_login_cf": {
+            "description": "Coppie \"login\":\"CF\".",
+            "type": "Select",
+            "runAfter": {
+              "Leggi_lavoratori": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_lavoratori')?['value']",
+              "select": "@concat('\"', toLower(coalesce(item()?['Login'], '')), '\":\"', coalesce(item()?['CodiceFiscale'], ''), '\"')"
+            },
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "inputs",
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Mappa_cf": {
+            "description": "Mappa login -> codice fiscale senza cicli: outputs('Mappa_cf')?['<login>'].",
+            "type": "Compose",
+            "runAfter": {
+              "Coppie_login_cf": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@json(concat('{', join(body('Coppie_login_cf'), ','), '}'))",
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "inputs",
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Righe_csv": {
+            "description": "Una riga per richiesta; testi tra doppi apici, decimali con la virgola, data gg/MM/aaaa.",
+            "type": "Select",
+            "runAfter": {
+              "Mappa_cf": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_richieste_da_inviare')?['value']",
+              "select": "@concat(concat('\"', replace(string(coalesce(outputs('Mappa_cf')?[toLower(coalesce(item()?['LavoratoreLogin'], ''))], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['Cognome'], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['Nome'], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['Area']?['Value'], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['Servizio'], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['CentroDiCosto'], '')), '\"', '\"\"'), '\"'), ';', string(coalesce(item()?['MeseCompetenza'], '')), ';', string(coalesce(item()?['AnnoCompetenza'], '')), ';', concat('\"', replace(string(coalesce(if(empty(item()?['TitoloCorsoCatalogo']), coalesce(item()?['TitoloCorsoLibero'], ''), item()?['TitoloCorsoCatalogo']), '')), '\"', '\"\"'), '\"'), ';', if(empty(item()?['DataSessione']), '', formatDateTime(if(empty(item()?['DataSessione']), null, if(equals(length(string(item()?['DataSessione'])), 10), string(item()?['DataSessione']), convertFromUtc(string(item()?['DataSessione']), 'W. Europe Standard Time', 'yyyy-MM-dd'))), 'dd/MM/yyyy')), ';', replace(string(float(coalesce(item()?['OreRetribuiteHR'], 0))), '.', ','), ';', replace(string(float(coalesce(item()?['OreGettoneHR'], 0))), '.', ','), ';', concat('\"', replace(string(coalesce(item()?['Title'], '')), '\"', '\"\"'), '\"'))"
+            },
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "inputs",
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Righe_senza_cf": {
+            "type": "Query",
+            "runAfter": {
+              "Righe_csv": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_richieste_da_inviare')?['value']",
+              "where": "@empty(outputs('Mappa_cf')?[toLower(coalesce(item()?['LavoratoreLogin'], ''))])"
+            }
+          },
+          "Versione_file": {
+            "type": "Compose",
+            "runAfter": {
+              "Righe_senza_cf": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@add(coalesce(outputs('Chiusura')?['VersioneFile'], 0), 1)"
+          },
+          "Nome_file": {
+            "type": "Compose",
+            "runAfter": {
+              "Versione_file": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@concat('Formazione_Payroll_', outputs('Periodo'), '_v', string(outputs('Versione_file')), '.csv')"
+          },
+          "Contenuto_csv": {
+            "description": "UTF-8 con BOM, separatore ;, righe CRLF.",
+            "type": "Compose",
+            "runAfter": {
+              "Nome_file": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@concat(decodeUriComponent('%EF%BB%BF'), 'Codice fiscale;Cognome;Nome;Area;Servizio;Centro di costo;Mese;Anno;Titolo corso;Data corso;Ore retribuite riconosciute HR;Ore gettone riconosciute HR;ID richiesta', decodeUriComponent('%0D%0A'), join(body('Righe_csv'), decodeUriComponent('%0D%0A')), decodeUriComponent('%0D%0A'))",
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "inputs",
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Crea_file_paghe": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Contenuto_csv": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "CreateFile",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "folderPath": "@outputs('Percorso_file_paghe')",
+                "name": "@outputs('Nome_file')",
+                "body": "@outputs('Contenuto_csv')"
+              },
+              "authentication": "@parameters('$authentication')"
+            },
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "inputs"
+                ]
+              }
+            }
+          },
+          "Proprieta_file_paghe": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Crea_file_paghe": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "PatchFileItem",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "File paghe",
+                "id": "@body('Crea_file_paghe')?['ItemId']",
+                "item/Periodo": "@outputs('Periodo')",
+                "item/NumeroRichieste": "@length(body('Leggi_richieste_da_inviare')?['value'])"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Url_file_paghe": {
+            "type": "Compose",
+            "runAfter": {
+              "Proprieta_file_paghe": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@concat(variables('SitoUrl'), replace(uriComponent(body('Crea_file_paghe')?['Path']), '%2F', '/'))"
+          },
+          "Ore_file": {
+            "type": "Select",
+            "runAfter": {
+              "Url_file_paghe": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_richieste_da_inviare')?['value']",
+              "select": {
+                "ore": "@float(coalesce(item()?['OreRetribuiteHR'], 0))",
+                "gettoni": "@float(coalesce(item()?['OreGettoneHR'], 0))"
+              }
+            }
+          },
+          "Xml_ore_file": {
+            "type": "Compose",
+            "runAfter": {
+              "Ore_file": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@xml(json(concat('{\"r\":{\"x\":', string(body('Ore_file')), '}}')))"
+          },
+          "Totali_file": {
+            "type": "Compose",
+            "runAfter": {
+              "Xml_ore_file": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "ore": "@float(formatNumber(xpath(outputs('Xml_ore_file'), 'sum(/r/x/ore)'), '0.00', 'en-US'))",
+              "gettoni": "@float(formatNumber(xpath(outputs('Xml_ore_file'), 'sum(/r/x/gettoni)'), '0.00', 'en-US'))"
+            }
+          },
+          "Dati_file_paghe": {
+            "type": "Compose",
+            "runAfter": {
+              "Totali_file": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "url": "@outputs('Url_file_paghe')",
+              "richieste": "@length(body('Leggi_richieste_da_inviare')?['value'])",
+              "senzaCodiceFiscale": "@length(body('Righe_senza_cf'))"
+            }
+          },
+          "Rispondi_file_paghe": {
+            "type": "Response",
+            "kind": "PowerApp",
+            "runAfter": {
+              "Dati_file_paghe": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "statusCode": 200,
+              "body": {
+                "esito": "OK",
+                "messaggio": "@{concat('File paghe generato: ', string(length(body('Leggi_richieste_da_inviare')?['value'])), ' richieste.', if(greater(length(body('Righe_senza_cf')), 0), concat(' Attenzione: ', string(length(body('Righe_senza_cf'))), ' righe senza codice fiscale.'), ''))}",
+                "dati": "@string(outputs('Dati_file_paghe'))"
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "esito": {
+                    "title": "esito",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "messaggio": {
+                    "title": "messaggio",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "dati": {
+                    "title": "dati",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "Segna_inviate_payroll": {
+            "description": "Dopo la risposta: Inclusa nel riepilogo mensile -> Inviata a Payroll.",
+            "type": "Foreach",
+            "runAfter": {
+              "Rispondi_file_paghe": [
+                "Succeeded"
+              ]
+            },
+            "foreach": "@body('Leggi_richieste_da_inviare')?['value']",
+            "actions": {
+              "Segna_inviata_payroll": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "PatchItem",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "table": "Richieste formazione",
+                    "id": "@items('Segna_inviate_payroll')?['ID']",
+                    "item/Title": "@items('Segna_inviate_payroll')?['Title']",
+                    "item/Stato/Value": "Inviata a Payroll",
+                    "item/UltimaModificaDa": "@outputs('Chiamante')"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              }
+            },
+            "runtimeConfiguration": {
+              "concurrency": {
+                "repetitions": 10
+              }
+            }
+          },
+          "Leggi_richieste_periodo": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Segna_inviate_payroll": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Richieste formazione",
+                "$filter": "AnnoCompetenza eq @{string(outputs('Anno'))} and MeseCompetenza eq @{string(outputs('Mese'))} and (Stato eq 'Inclusa nel riepilogo mensile' or Stato eq 'Inviata a Payroll')",
+                "$top": 5000
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Ore_periodo": {
+            "type": "Select",
+            "runAfter": {
+              "Leggi_richieste_periodo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_richieste_periodo')?['value']",
+              "select": {
+                "ore": "@float(coalesce(item()?['OreRetribuiteHR'], 0))",
+                "gettoni": "@float(coalesce(item()?['OreGettoneHR'], 0))"
+              }
+            }
+          },
+          "Xml_ore_periodo": {
+            "type": "Compose",
+            "runAfter": {
+              "Ore_periodo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@xml(json(concat('{\"r\":{\"x\":', string(body('Ore_periodo')), '}}')))"
+          },
+          "Totali_periodo": {
+            "type": "Compose",
+            "runAfter": {
+              "Xml_ore_periodo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "numero": "@length(body('Leggi_richieste_periodo')?['value'])",
+              "ore": "@float(formatNumber(xpath(outputs('Xml_ore_periodo'), 'sum(/r/x/ore)'), '0.00', 'en-US'))",
+              "gettoni": "@float(formatNumber(xpath(outputs('Xml_ore_periodo'), 'sum(/r/x/gettoni)'), '0.00', 'en-US'))"
+            }
+          },
+          "Aggiorna_chiusura_file": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Totali_periodo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "PatchItem",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Chiusure mensili",
+                "id": "@outputs('Chiusura')?['ID']",
+                "item/Title": "@outputs('Periodo')",
+                "item/Mese": "@outputs('Mese')",
+                "item/Anno": "@outputs('Anno')",
+                "item/FilePagheGenerato": true,
+                "item/FilePagheUrl": "@outputs('Url_file_paghe')",
+                "item/VersioneFile": "@outputs('Versione_file')",
+                "item/NumeroRichieste": "@outputs('Totali_periodo')?['numero']",
+                "item/TotaleOreRiconosciute": "@outputs('Totali_periodo')?['ore']",
+                "item/TotaleGettoni": "@outputs('Totali_periodo')?['gettoni']"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Registro_file_paghe": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Aggiorna_chiusura_file": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "PostItem",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Registro modifiche",
+                "item/Title": "Generazione file paghe",
+                "item/Tabella": "File paghe",
+                "item/IdRecord": "@{string(body('Crea_file_paghe')?['ItemId'])}",
+                "item/Campo": "VersioneFile",
+                "item/ValorePrecedente": "@{string(coalesce(outputs('Chiusura')?['VersioneFile'], 0))}",
+                "item/ValoreNuovo": "@{string(outputs('Versione_file'))}",
+                "item/Ruolo/Value": "@outputs('Ruolo_registro')",
+                "item/LoginAutore": "@outputs('Chiamante')",
+                "item/Nota": "@{concat(outputs('Nome_file'), ': ', string(length(body('Leggi_richieste_da_inviare')?['value'])), ' richieste passate a Inviata a Payroll.')}"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Email_file_paghe": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Registro_file_paghe": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_office365",
+                "operationId": "SendEmailV2",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+              },
+              "parameters": {
+                "emailMessage/To": "@{outputs('Configurazione')?['DestinatariPayroll']}",
+                "emailMessage/Subject": "File paghe formazione – @{concat(createArray('gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre')[sub(outputs('Mese'), 1)], ' ', string(outputs('Anno')))} (versione @{string(outputs('Versione_file'))})",
+                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">File paghe disponibile</p><p style=\"margin:0 0 16px 0;line-height:1.5\">È disponibile il file con le ore di formazione validate dall'Ufficio HR/Formazione.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Periodo</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{concat(createArray('gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre')[sub(outputs('Mese'), 1)], ' ', string(outputs('Anno')))}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">File</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Nome_file')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste incluse</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{string(length(body('Leggi_richieste_da_inviare')?['value']))}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Totale ore retribuite riconosciute HR</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(outputs('Totali_file')?['ore'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Totale ore gettone riconosciute HR</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(outputs('Totali_file')?['gettoni'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Versione</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{string(outputs('Versione_file'))}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Generato da</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Chiamante')}</td></tr></table>@{if(greater(length(body('Righe_senza_cf')), 0), concat('<div style=\"margin:0 0 16px 0;padding:10px 14px;background:#FFF4CE;border-left:4px solid #CA5010\">Attenzione: ', string(length(body('Righe_senza_cf'))), ' righe senza codice fiscale. Verificare la lista Lavoratori prima del caricamento.</div>'), '')}<p style=\"margin:0 0 16px 0;line-height:1.5\">Il collegamento funziona solo per gli utenti autorizzati alla raccolta <i>File paghe</i>.</p><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Url_file_paghe')}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri il file paghe</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                "emailMessage/Importance": "Normal"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          }
+        }
+      },
+      "Errore": {
+        "description": "Eseguito solo se 'Prova' non riesce: risponde con un errore generico e avvisa HR.",
+        "type": "Scope",
+        "runAfter": {
+          "Prova": [
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "actions": {
+          "Rispondi_errore_imprevisto": {
+            "type": "Response",
+            "kind": "PowerApp",
+            "runAfter": {},
+            "inputs": {
+              "statusCode": 200,
+              "body": {
+                "esito": "ERRORE",
+                "messaggio": "Si è verificato un errore imprevisto. Riprova più tardi o contatta l'Ufficio HR/Formazione.",
+                "dati": "{}"
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "esito": {
+                    "title": "esito",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "messaggio": {
+                    "title": "messaggio",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "dati": {
+                    "title": "dati",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "Link_esecuzione": {
+            "type": "Compose",
+            "runAfter": {
+              "Rispondi_errore_imprevisto": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": "@concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])"
+          },
+          "Azioni_non_riuscite": {
+            "type": "Query",
+            "runAfter": {
+              "Link_esecuzione": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@result('Prova')",
+              "where": "@equals(item()?['status'], 'Failed')"
+            }
+          },
+          "Dettaglio_azioni_non_riuscite": {
+            "type": "Select",
+            "runAfter": {
+              "Azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Azioni_non_riuscite')",
+              "select": "@concat(item()?['name'], ': ', coalesce(item()?['error']?['message'], item()?['code'], ''))"
+            }
+          },
+          "Avvisa_HR_errore": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Dettaglio_azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_office365",
+                "operationId": "SendEmailV2",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+              },
+              "parameters": {
+                "emailMessage/To": "@{outputs('Configurazione')?['EmailHR']}",
+                "emailMessage/Subject": "Errore nel flusso @{workflow()?['tags']?['flowDisplayName']}",
+                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Errore in un flusso</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Un flusso dell'app non è stato completato. Apri l'esecuzione per i dettagli.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Flusso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{workflow()?['tags']?['flowDisplayName']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data e ora</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{convertFromUtc(utcNow(), 'W. Europe Standard Time', 'dd/MM/yyyy HH:mm')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Utente che ha chiamato</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Chiamante')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Azioni non riuscite</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(join(body('Dettaglio_azioni_non_riuscite'), ' | '), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr></table><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Link_esecuzione')}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'esecuzione</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                "emailMessage/Importance": "High"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Termina_con_errore": {
+            "type": "Terminate",
+            "runAfter": {
+              "Avvisa_HR_errore": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": {
+              "runStatus": "Failed",
+              "runError": {
+                "code": "ErroreFlusso",
+                "message": "Errore nel blocco Prova: vedere le azioni non riuscite."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,529 @@
+{
+  "name": "SDF_F4_Promemoria",
+  "description": "F4 – Ogni giorno lavorativo alle 08:00: incrementa i giorni di attesa delle richieste In attesa del coordinatore, promemoria al coordinatore al 3° e 5° giorno, dal 7° segnala anche a HR (requisito Flusso 4).",
+  "connectionReferences": {
+    "shared_sharepointonline": {
+      "connectionName": "shared-sharepointonl-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "tier": "NotSpecified"
+    },
+    "shared_office365": {
+      "connectionName": "shared-office365-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365",
+      "tier": "NotSpecified"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      },
+      "$authentication": {
+        "defaultValue": {},
+        "type": "SecureObject"
+      }
+    },
+    "triggers": {
+      "Ricorrenza_giorni_lavorativi": {
+        "recurrence": {
+          "frequency": "Week",
+          "interval": 1,
+          "schedule": {
+            "weekDays": [
+              "Monday",
+              "Tuesday",
+              "Wednesday",
+              "Thursday",
+              "Friday"
+            ],
+            "hours": [
+              "8"
+            ],
+            "minutes": [
+              0
+            ]
+          },
+          "timeZone": "W. Europe Standard Time"
+        },
+        "type": "Recurrence"
+      }
+    },
+    "actions": {
+      "Inizializza_SitoUrl": {
+        "type": "InitializeVariable",
+        "runAfter": {},
+        "inputs": {
+          "variables": [
+            {
+              "name": "SitoUrl",
+              "type": "string",
+              "value": "{{SITO_URL}}"
+            }
+          ]
+        }
+      },
+      "Leggi_configurazione": {
+        "description": "Legge i parametri della lista Configurazione.",
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Inizializza_SitoUrl": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "@variables('SitoUrl')",
+            "table": "Configurazione",
+            "$top": 500
+          },
+          "authentication": "@parameters('$authentication')"
+        }
+      },
+      "Seleziona_configurazione": {
+        "type": "Select",
+        "runAfter": {
+          "Leggi_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Leggi_configurazione')?['value']",
+          "select": {
+            "@item()?['Title']": "@item()?['Valore']"
+          }
+        }
+      },
+      "Configurazione": {
+        "description": "Oggetto chiave/valore: outputs('Configurazione')?['EmailHR'], ?['AppUrl'], ...",
+        "type": "Compose",
+        "runAfter": {
+          "Seleziona_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@json(replace(replace(replace(string(body('Seleziona_configurazione')),'[{','{'),'}]','}'),'},{',','))"
+      },
+      "Prova": {
+        "type": "Scope",
+        "runAfter": {
+          "Configurazione": [
+            "Succeeded"
+          ]
+        },
+        "actions": {
+          "Oggi": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": "@formatDateTime(convertFromUtc(utcNow(), 'W. Europe Standard Time'), 'yyyy-MM-dd')"
+          },
+          "Festivita": {
+            "type": "Compose",
+            "runAfter": {
+              "Oggi": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@json(coalesce(outputs('Configurazione')?['Festivita'], '[]'))"
+          },
+          "Se_giorno_festivo": {
+            "description": "Oggi è in Configurazione.Festivita: nessun conteggio.",
+            "type": "If",
+            "runAfter": {
+              "Festivita": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@contains(outputs('Festivita'), outputs('Oggi'))",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Termina_giorno_festivo": {
+                "type": "Terminate",
+                "runAfter": {},
+                "inputs": {
+                  "runStatus": "Succeeded"
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Leggi_richieste_in_attesa": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Se_giorno_festivo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Richieste formazione",
+                "$filter": "Stato eq 'In attesa del coordinatore'",
+                "$top": 5000
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Per_ogni_richiesta_in_attesa": {
+            "type": "Foreach",
+            "runAfter": {
+              "Leggi_richieste_in_attesa": [
+                "Succeeded"
+              ]
+            },
+            "foreach": "@body('Leggi_richieste_in_attesa')?['value']",
+            "actions": {
+              "Se_da_conteggiare": {
+                "description": "Le richieste inviate oggi non vengono conteggiate.",
+                "type": "If",
+                "runAfter": {},
+                "expression": {
+                  "and": [
+                    {
+                      "equals": [
+                        "@if(empty(items('Per_ogni_richiesta_in_attesa')?['DataInvio']), true, less(convertFromUtc(items('Per_ogni_richiesta_in_attesa')?['DataInvio'], 'W. Europe Standard Time', 'yyyy-MM-dd'), outputs('Oggi')))",
+                        true
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Nuovi_giorni_attesa": {
+                    "type": "Compose",
+                    "runAfter": {},
+                    "inputs": "@add(coalesce(items('Per_ogni_richiesta_in_attesa')?['GiorniAttesa'], 0), 1)"
+                  },
+                  "Da_segnalare_HR": {
+                    "type": "Compose",
+                    "runAfter": {
+                      "Nuovi_giorni_attesa": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": "@and(greaterOrEquals(outputs('Nuovi_giorni_attesa'), 7), not(equals(items('Per_ogni_richiesta_in_attesa')?['SegnalataHR'], true)))"
+                  },
+                  "Aggiorna_giorni_attesa": {
+                    "type": "OpenApiConnection",
+                    "runAfter": {
+                      "Da_segnalare_HR": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "PatchItem",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "@variables('SitoUrl')",
+                        "table": "Richieste formazione",
+                        "id": "@items('Per_ogni_richiesta_in_attesa')?['ID']",
+                        "item/Title": "@items('Per_ogni_richiesta_in_attesa')?['Title']",
+                        "item/GiorniAttesa": "@outputs('Nuovi_giorni_attesa')",
+                        "item/SegnalataHR": "@or(equals(items('Per_ogni_richiesta_in_attesa')?['SegnalataHR'], true), outputs('Da_segnalare_HR'))"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    }
+                  },
+                  "Se_promemoria": {
+                    "description": "Promemoria al 3° e al 5° giorno lavorativo.",
+                    "type": "If",
+                    "runAfter": {
+                      "Aggiorna_giorni_attesa": [
+                        "Succeeded"
+                      ]
+                    },
+                    "expression": {
+                      "and": [
+                        {
+                          "equals": [
+                            "@and(or(equals(outputs('Nuovi_giorni_attesa'), 3), equals(outputs('Nuovi_giorni_attesa'), 5)), not(empty(if(empty(items('Per_ogni_richiesta_in_attesa')?['CoordinatoreEmail']), items('Per_ogni_richiesta_in_attesa')?['CoordinatoreLogin'], items('Per_ogni_richiesta_in_attesa')?['CoordinatoreEmail']))))",
+                            true
+                          ]
+                        }
+                      ]
+                    },
+                    "actions": {
+                      "Email_promemoria_coordinatore": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {},
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_office365",
+                            "operationId": "SendEmailV2",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                          },
+                          "parameters": {
+                            "emailMessage/To": "@{if(empty(items('Per_ogni_richiesta_in_attesa')?['CoordinatoreEmail']), items('Per_ogni_richiesta_in_attesa')?['CoordinatoreLogin'], items('Per_ogni_richiesta_in_attesa')?['CoordinatoreEmail'])}",
+                            "emailMessage/Subject": "Promemoria: richiesta di formazione in attesa – @{items('Per_ogni_richiesta_in_attesa')?['Title']}",
+                            "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Richiesta in attesa della tua approvazione</p><p style=\"margin:0 0 16px 0;line-height:1.5\">La richiesta qui sotto attende la tua approvazione da <b>@{string(outputs('Nuovi_giorni_attesa'))} giorni lavorativi</b>. Apri la richiesta per approvarla, respingerla o chiedere un'integrazione.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">ID richiesta</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{items('Per_ogni_richiesta_in_attesa')?['Title']}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Lavoratore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(concat(items('Per_ogni_richiesta_in_attesa')?['Cognome'], ' ', items('Per_ogni_richiesta_in_attesa')?['Nome']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Servizio / centro di costo</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(items('Per_ogni_richiesta_in_attesa')?['Servizio'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} – @{replace(replace(replace(string(coalesce(items('Per_ogni_richiesta_in_attesa')?['CentroDiCosto'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Corso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(if(empty(items('Per_ogni_richiesta_in_attesa')?['TitoloCorsoCatalogo']), coalesce(items('Per_ogni_richiesta_in_attesa')?['TitoloCorsoLibero'], ''), items('Per_ogni_richiesta_in_attesa')?['TitoloCorsoCatalogo']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} (@{replace(replace(replace(string(coalesce(items('Per_ogni_richiesta_in_attesa')?['CodiceCorso'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')})</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data sessione</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{if(empty(items('Per_ogni_richiesta_in_attesa')?['DataSessione']), '', formatDateTime(if(empty(items('Per_ogni_richiesta_in_attesa')?['DataSessione']), null, if(equals(length(string(items('Per_ogni_richiesta_in_attesa')?['DataSessione'])), 10), string(items('Per_ogni_richiesta_in_attesa')?['DataSessione']), convertFromUtc(string(items('Per_ogni_richiesta_in_attesa')?['DataSessione']), 'W. Europe Standard Time', 'yyyy-MM-dd'))), 'dd/MM/yyyy'))}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Orario sessione</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{items('Per_ogni_richiesta_in_attesa')?['OraInizioSessione']} – @{items('Per_ogni_richiesta_in_attesa')?['OraFineSessione']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Presenza (ingresso – uscita)</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{items('Per_ogni_richiesta_in_attesa')?['OraIngresso']} – @{items('Per_ogni_richiesta_in_attesa')?['OraUscita']} (@{formatNumber(float(coalesce(items('Per_ogni_richiesta_in_attesa')?['OreFrequentate'], 0)), '0.##', 'it-IT')} ore)</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(items('Per_ogni_richiesta_in_attesa')?['OreRetribuiteRichieste'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore gettone richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(items('Per_ogni_richiesta_in_attesa')?['OreGettoneRichieste'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Coordinatore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(items('Per_ogni_richiesta_in_attesa')?['CoordinatoreNome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Inviata il</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{if(empty(items('Per_ogni_richiesta_in_attesa')?['DataInvio']), '', convertFromUtc(items('Per_ogni_richiesta_in_attesa')?['DataInvio'], 'W. Europe Standard Time', 'dd/MM/yyyy HH:mm'))}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Giorni lavorativi di attesa</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{string(outputs('Nuovi_giorni_attesa'))}</b></td></tr></table><p style=\"margin:24px 0 8px 0\"><a href=\"@{concat(outputs('Configurazione')?['AppUrl'], '&richiesta=', string(items('Per_ogni_richiesta_in_attesa')?['ID']))}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri la richiesta</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                            "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                            "emailMessage/Importance": "Normal"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      },
+                      "Registro_promemoria_non_riuscito": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {
+                          "Email_promemoria_coordinatore": [
+                            "Failed",
+                            "TimedOut"
+                          ]
+                        },
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "PostItem",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@variables('SitoUrl')",
+                            "table": "Registro modifiche",
+                            "item/Title": "Promemoria al coordinatore non riuscito",
+                            "item/RichiestaRif": "@items('Per_ogni_richiesta_in_attesa')?['ID']",
+                            "item/IdRichiesta": "@{items('Per_ogni_richiesta_in_attesa')?['Title']}",
+                            "item/Tabella": "Richieste formazione",
+                            "item/IdRecord": "@{string(items('Per_ogni_richiesta_in_attesa')?['ID'])}",
+                            "item/Ruolo/Value": "Sistema",
+                            "item/LoginAutore": "@coalesce(outputs('Configurazione')?['AccountServizio'], 'sistema')",
+                            "item/Nota": "Invio non riuscito a @{if(empty(items('Per_ogni_richiesta_in_attesa')?['CoordinatoreEmail']), items('Per_ogni_richiesta_in_attesa')?['CoordinatoreLogin'], items('Per_ogni_richiesta_in_attesa')?['CoordinatoreEmail'])}"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      },
+                      "Registro_promemoria": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {
+                          "Email_promemoria_coordinatore": [
+                            "Succeeded"
+                          ]
+                        },
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "PostItem",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@variables('SitoUrl')",
+                            "table": "Registro modifiche",
+                            "item/Title": "@{concat('Promemoria al coordinatore (', string(outputs('Nuovi_giorni_attesa')), ' giorni)')}",
+                            "item/RichiestaRif": "@items('Per_ogni_richiesta_in_attesa')?['ID']",
+                            "item/IdRichiesta": "@{items('Per_ogni_richiesta_in_attesa')?['Title']}",
+                            "item/Tabella": "Richieste formazione",
+                            "item/IdRecord": "@{string(items('Per_ogni_richiesta_in_attesa')?['ID'])}",
+                            "item/Campo": "GiorniAttesa",
+                            "item/ValoreNuovo": "@{string(outputs('Nuovi_giorni_attesa'))}",
+                            "item/Ruolo/Value": "Sistema",
+                            "item/LoginAutore": "@coalesce(outputs('Configurazione')?['AccountServizio'], 'sistema')"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {}
+                    }
+                  },
+                  "Se_sollecito_HR": {
+                    "description": "Dal 7° giorno: coordinatore + HR, una sola volta (Sollecito segnalato a HR = Sì).",
+                    "type": "If",
+                    "runAfter": {
+                      "Se_promemoria": [
+                        "Succeeded"
+                      ]
+                    },
+                    "expression": {
+                      "and": [
+                        {
+                          "equals": [
+                            "@outputs('Da_segnalare_HR')",
+                            true
+                          ]
+                        }
+                      ]
+                    },
+                    "actions": {
+                      "Email_sollecito_HR": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {},
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_office365",
+                            "operationId": "SendEmailV2",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                          },
+                          "parameters": {
+                            "emailMessage/To": "@{if(empty(if(empty(items('Per_ogni_richiesta_in_attesa')?['CoordinatoreEmail']), items('Per_ogni_richiesta_in_attesa')?['CoordinatoreLogin'], items('Per_ogni_richiesta_in_attesa')?['CoordinatoreEmail'])), outputs('Configurazione')?['EmailHR'], if(empty(items('Per_ogni_richiesta_in_attesa')?['CoordinatoreEmail']), items('Per_ogni_richiesta_in_attesa')?['CoordinatoreLogin'], items('Per_ogni_richiesta_in_attesa')?['CoordinatoreEmail']))}",
+                            "emailMessage/Subject": "Sollecito: richiesta di formazione in attesa da @{string(outputs('Nuovi_giorni_attesa'))} giorni – @{items('Per_ogni_richiesta_in_attesa')?['Title']}",
+                            "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Richiesta in attesa da 7 o più giorni lavorativi</p><p style=\"margin:0 0 16px 0;line-height:1.5\">La richiesta qui sotto non ha ancora ricevuto un esito dal coordinatore. La segnalazione è stata inviata anche all'Ufficio HR/Formazione.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">ID richiesta</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{items('Per_ogni_richiesta_in_attesa')?['Title']}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Lavoratore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(concat(items('Per_ogni_richiesta_in_attesa')?['Cognome'], ' ', items('Per_ogni_richiesta_in_attesa')?['Nome']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Servizio / centro di costo</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(items('Per_ogni_richiesta_in_attesa')?['Servizio'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} – @{replace(replace(replace(string(coalesce(items('Per_ogni_richiesta_in_attesa')?['CentroDiCosto'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Corso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(if(empty(items('Per_ogni_richiesta_in_attesa')?['TitoloCorsoCatalogo']), coalesce(items('Per_ogni_richiesta_in_attesa')?['TitoloCorsoLibero'], ''), items('Per_ogni_richiesta_in_attesa')?['TitoloCorsoCatalogo']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} (@{replace(replace(replace(string(coalesce(items('Per_ogni_richiesta_in_attesa')?['CodiceCorso'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')})</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data sessione</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{if(empty(items('Per_ogni_richiesta_in_attesa')?['DataSessione']), '', formatDateTime(if(empty(items('Per_ogni_richiesta_in_attesa')?['DataSessione']), null, if(equals(length(string(items('Per_ogni_richiesta_in_attesa')?['DataSessione'])), 10), string(items('Per_ogni_richiesta_in_attesa')?['DataSessione']), convertFromUtc(string(items('Per_ogni_richiesta_in_attesa')?['DataSessione']), 'W. Europe Standard Time', 'yyyy-MM-dd'))), 'dd/MM/yyyy'))}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Orario sessione</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{items('Per_ogni_richiesta_in_attesa')?['OraInizioSessione']} – @{items('Per_ogni_richiesta_in_attesa')?['OraFineSessione']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Presenza (ingresso – uscita)</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{items('Per_ogni_richiesta_in_attesa')?['OraIngresso']} – @{items('Per_ogni_richiesta_in_attesa')?['OraUscita']} (@{formatNumber(float(coalesce(items('Per_ogni_richiesta_in_attesa')?['OreFrequentate'], 0)), '0.##', 'it-IT')} ore)</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(items('Per_ogni_richiesta_in_attesa')?['OreRetribuiteRichieste'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore gettone richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(items('Per_ogni_richiesta_in_attesa')?['OreGettoneRichieste'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Coordinatore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(items('Per_ogni_richiesta_in_attesa')?['CoordinatoreNome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Inviata il</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{if(empty(items('Per_ogni_richiesta_in_attesa')?['DataInvio']), '', convertFromUtc(items('Per_ogni_richiesta_in_attesa')?['DataInvio'], 'W. Europe Standard Time', 'dd/MM/yyyy HH:mm'))}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Giorni lavorativi di attesa</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{string(outputs('Nuovi_giorni_attesa'))}</b></td></tr></table><p style=\"margin:24px 0 8px 0\"><a href=\"@{concat(outputs('Configurazione')?['AppUrl'], '&richiesta=', string(items('Per_ogni_richiesta_in_attesa')?['ID']))}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri la richiesta</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                            "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                            "emailMessage/Cc": "@{outputs('Configurazione')?['EmailHR']}",
+                            "emailMessage/Importance": "High"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      },
+                      "Registro_sollecito": {
+                        "type": "OpenApiConnection",
+                        "runAfter": {
+                          "Email_sollecito_HR": [
+                            "Succeeded",
+                            "Failed",
+                            "TimedOut"
+                          ]
+                        },
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "PostItem",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@variables('SitoUrl')",
+                            "table": "Registro modifiche",
+                            "item/Title": "Sollecito segnalato a HR",
+                            "item/RichiestaRif": "@items('Per_ogni_richiesta_in_attesa')?['ID']",
+                            "item/IdRichiesta": "@{items('Per_ogni_richiesta_in_attesa')?['Title']}",
+                            "item/Tabella": "Richieste formazione",
+                            "item/IdRecord": "@{string(items('Per_ogni_richiesta_in_attesa')?['ID'])}",
+                            "item/Campo": "SegnalataHR",
+                            "item/ValorePrecedente": "No",
+                            "item/ValoreNuovo": "Sì",
+                            "item/Ruolo/Value": "Sistema",
+                            "item/LoginAutore": "@coalesce(outputs('Configurazione')?['AccountServizio'], 'sistema')",
+                            "item/Nota": "@{concat(string(outputs('Nuovi_giorni_attesa')), ' giorni lavorativi in attesa', if(equals(actions('Email_sollecito_HR')?['status'], 'Succeeded'), '', ' – e-mail di sollecito NON inviata'))}"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {}
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {}
+                }
+              }
+            },
+            "runtimeConfiguration": {
+              "concurrency": {
+                "repetitions": 10
+              }
+            }
+          }
+        }
+      },
+      "Errore": {
+        "description": "Eseguito solo se 'Prova' non riesce: risponde con un errore generico e avvisa HR.",
+        "type": "Scope",
+        "runAfter": {
+          "Prova": [
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "actions": {
+          "Link_esecuzione": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": "@concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])"
+          },
+          "Azioni_non_riuscite": {
+            "type": "Query",
+            "runAfter": {
+              "Link_esecuzione": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@result('Prova')",
+              "where": "@equals(item()?['status'], 'Failed')"
+            }
+          },
+          "Dettaglio_azioni_non_riuscite": {
+            "type": "Select",
+            "runAfter": {
+              "Azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Azioni_non_riuscite')",
+              "select": "@concat(item()?['name'], ': ', coalesce(item()?['error']?['message'], item()?['code'], ''))"
+            }
+          },
+          "Avvisa_HR_errore": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Dettaglio_azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_office365",
+                "operationId": "SendEmailV2",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+              },
+              "parameters": {
+                "emailMessage/To": "@{outputs('Configurazione')?['EmailHR']}",
+                "emailMessage/Subject": "Errore nel flusso @{workflow()?['tags']?['flowDisplayName']}",
+                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Errore in un flusso</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Un flusso dell'app non è stato completato. Apri l'esecuzione per i dettagli.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Flusso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{workflow()?['tags']?['flowDisplayName']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data e ora</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{convertFromUtc(utcNow(), 'W. Europe Standard Time', 'dd/MM/yyyy HH:mm')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Azioni non riuscite</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(join(body('Dettaglio_azioni_non_riuscite'), ' | '), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr></table><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Link_esecuzione')}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'esecuzione</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                "emailMessage/Importance": "High"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Termina_con_errore": {
+            "type": "Terminate",
+            "runAfter": {
+              "Avvisa_HR_errore": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": {
+              "runStatus": "Failed",
+              "runError": {
+                "code": "ErroreFlusso",
+                "message": "Errore nel blocco Prova: vedere le azioni non riuscite."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

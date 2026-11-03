@@ -1,0 +1,694 @@
+{
+  "name": "SDF_F5_RiepilogoMensile",
+  "description": "F5 – Il giorno 2 di ogni mese alle 07:00: riepilogo del mese precedente a ogni coordinatore e quadro completo a HR con totali per coordinatore e CSV allegato; evidenzia aperte, respinte e incomplete (requisito Flusso 5).",
+  "connectionReferences": {
+    "shared_sharepointonline": {
+      "connectionName": "shared-sharepointonl-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "tier": "NotSpecified"
+    },
+    "shared_office365": {
+      "connectionName": "shared-office365-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365",
+      "tier": "NotSpecified"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      },
+      "$authentication": {
+        "defaultValue": {},
+        "type": "SecureObject"
+      }
+    },
+    "triggers": {
+      "Ricorrenza_mensile": {
+        "recurrence": {
+          "frequency": "Month",
+          "interval": 1,
+          "startTime": "2026-12-02T07:00:00",
+          "timeZone": "W. Europe Standard Time"
+        },
+        "type": "Recurrence"
+      }
+    },
+    "actions": {
+      "Inizializza_SitoUrl": {
+        "type": "InitializeVariable",
+        "runAfter": {},
+        "inputs": {
+          "variables": [
+            {
+              "name": "SitoUrl",
+              "type": "string",
+              "value": "{{SITO_URL}}"
+            }
+          ]
+        }
+      },
+      "Leggi_configurazione": {
+        "description": "Legge i parametri della lista Configurazione.",
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Inizializza_SitoUrl": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "@variables('SitoUrl')",
+            "table": "Configurazione",
+            "$top": 500
+          },
+          "authentication": "@parameters('$authentication')"
+        }
+      },
+      "Seleziona_configurazione": {
+        "type": "Select",
+        "runAfter": {
+          "Leggi_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Leggi_configurazione')?['value']",
+          "select": {
+            "@item()?['Title']": "@item()?['Valore']"
+          }
+        }
+      },
+      "Configurazione": {
+        "description": "Oggetto chiave/valore: outputs('Configurazione')?['EmailHR'], ?['AppUrl'], ...",
+        "type": "Compose",
+        "runAfter": {
+          "Seleziona_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@json(replace(replace(replace(string(body('Seleziona_configurazione')),'[{','{'),'}]','}'),'},{',','))"
+      },
+      "Inizializza_TotaliCoordinatori": {
+        "type": "InitializeVariable",
+        "runAfter": {
+          "Configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "variables": [
+            {
+              "name": "TotaliCoordinatori",
+              "type": "array",
+              "value": []
+            }
+          ]
+        }
+      },
+      "Inizializza_EmailNonInviate": {
+        "type": "InitializeVariable",
+        "runAfter": {
+          "Inizializza_TotaliCoordinatori": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "variables": [
+            {
+              "name": "EmailNonInviate",
+              "type": "array",
+              "value": []
+            }
+          ]
+        }
+      },
+      "Prova": {
+        "type": "Scope",
+        "runAfter": {
+          "Inizializza_EmailNonInviate": [
+            "Succeeded"
+          ]
+        },
+        "actions": {
+          "Mese_precedente": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": "@addToTime(startOfMonth(convertFromUtc(utcNow(), 'W. Europe Standard Time')), -1, 'Month')"
+          },
+          "Anno_riferimento": {
+            "type": "Compose",
+            "runAfter": {
+              "Mese_precedente": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@int(formatDateTime(outputs('Mese_precedente'), 'yyyy'))"
+          },
+          "Mese_riferimento": {
+            "type": "Compose",
+            "runAfter": {
+              "Anno_riferimento": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@int(formatDateTime(outputs('Mese_precedente'), 'MM'))"
+          },
+          "Leggi_richieste_mese": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Mese_riferimento": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Richieste formazione",
+                "$filter": "AnnoCompetenza eq @{string(outputs('Anno_riferimento'))} and MeseCompetenza eq @{string(outputs('Mese_riferimento'))}",
+                "$top": 5000
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Richieste_riepilogo": {
+            "description": "Escluse bozze e annullate.",
+            "type": "Query",
+            "runAfter": {
+              "Leggi_richieste_mese": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_richieste_mese')?['value']",
+              "where": "@not(contains(createArray('Bozza', 'Annullata'), item()?['Stato']?['Value']))"
+            }
+          },
+          "Righe_riepilogo": {
+            "description": "Una riga per richiesta con ore e indicatori (aperta, respinta, incompleta).",
+            "type": "Select",
+            "runAfter": {
+              "Richieste_riepilogo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Richieste_riepilogo')",
+              "select": {
+                "coord": "@toLower(trim(coalesce(item()?['CoordinatoreLogin'], '')))",
+                "coordNome": "@coalesce(item()?['CoordinatoreNome'], item()?['CoordinatoreLogin'], '(senza coordinatore)')",
+                "coordEmail": "@if(empty(item()?['CoordinatoreEmail']), item()?['CoordinatoreLogin'], item()?['CoordinatoreEmail'])",
+                "login": "@toLower(coalesce(item()?['LavoratoreLogin'], ''))",
+                "id": "@item()?['ID']",
+                "richiesta": "@item()?['Title']",
+                "lavoratore": "@concat(coalesce(item()?['Cognome'], ''), ' ', coalesce(item()?['Nome'], ''))",
+                "area": "@coalesce(item()?['Area']?['Value'], '')",
+                "servizio": "@coalesce(item()?['Servizio'], '')",
+                "centroDiCosto": "@coalesce(item()?['CentroDiCosto'], '')",
+                "corso": "@if(empty(item()?['TitoloCorsoCatalogo']), coalesce(item()?['TitoloCorsoLibero'], ''), item()?['TitoloCorsoCatalogo'])",
+                "codiceCorso": "@coalesce(item()?['CodiceCorso'], '')",
+                "data": "@if(empty(item()?['DataSessione']), '', formatDateTime(if(empty(item()?['DataSessione']), null, if(equals(length(string(item()?['DataSessione'])), 10), string(item()?['DataSessione']), convertFromUtc(string(item()?['DataSessione']), 'W. Europe Standard Time', 'yyyy-MM-dd'))), 'dd/MM/yyyy'))",
+                "stato": "@coalesce(item()?['Stato']?['Value'], '')",
+                "f": "@float(coalesce(item()?['OreFrequentate'], 0))",
+                "rr": "@float(coalesce(item()?['OreRetribuiteRichieste'], 0))",
+                "gr": "@float(coalesce(item()?['OreGettoneRichieste'], 0))",
+                "rc": "@float(coalesce(item()?['OreRetribuiteCoord'], 0))",
+                "gc": "@float(coalesce(item()?['OreGettoneCoord'], 0))",
+                "rh": "@float(coalesce(item()?['OreRetribuiteHR'], 0))",
+                "gh": "@float(coalesce(item()?['OreGettoneHR'], 0))",
+                "aperta": "@if(contains(createArray('Inviata al coordinatore', 'In attesa del coordinatore', 'Integrazione richiesta dal coordinatore', 'Integrazione richiesta da HR'), item()?['Stato']?['Value']), 1, 0)",
+                "respinta": "@if(contains(createArray('Respinta dal coordinatore', 'Respinta da HR'), item()?['Stato']?['Value']), 1, 0)",
+                "incompleta": "@if(or(not(equals(item()?['AttestatoPresente'], true)), not(empty(item()?['Anomalie'])), equals(item()?['PossibileDuplicato'], true)), 1, 0)",
+                "etichette": "@concat(if(contains(createArray('Inviata al coordinatore', 'In attesa del coordinatore', 'Integrazione richiesta dal coordinatore', 'Integrazione richiesta da HR'), item()?['Stato']?['Value']), 'Aperta · ', ''), if(contains(createArray('Respinta dal coordinatore', 'Respinta da HR'), item()?['Stato']?['Value']), 'Respinta · ', ''), if(not(equals(item()?['AttestatoPresente'], true)), 'Attestato mancante · ', ''), if(not(empty(item()?['Anomalie'])), 'Anomalie · ', ''), if(equals(item()?['PossibileDuplicato'], true), 'Possibile duplicato · ', ''))",
+                "colore": "@if(contains(createArray('Respinta dal coordinatore', 'Respinta da HR'), item()?['Stato']?['Value']), '#FDE7E9', if(contains(createArray('Inviata al coordinatore', 'In attesa del coordinatore', 'Integrazione richiesta dal coordinatore', 'Integrazione richiesta da HR'), item()?['Stato']?['Value']), '#FFF4CE', if(or(not(equals(item()?['AttestatoPresente'], true)), not(empty(item()?['Anomalie'])), equals(item()?['PossibileDuplicato'], true)), '#F3F2F1', '#FFFFFF')))"
+              }
+            }
+          },
+          "Elenco_coordinatori": {
+            "type": "Select",
+            "runAfter": {
+              "Righe_riepilogo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Righe_riepilogo')",
+              "select": "@item()?['coord']"
+            }
+          },
+          "Coordinatori_distinti": {
+            "description": "union() di un elenco con se stesso = valori distinti.",
+            "type": "Compose",
+            "runAfter": {
+              "Elenco_coordinatori": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@union(body('Elenco_coordinatori'), body('Elenco_coordinatori'))"
+          },
+          "Per_ogni_coordinatore": {
+            "type": "Foreach",
+            "runAfter": {
+              "Coordinatori_distinti": [
+                "Succeeded"
+              ]
+            },
+            "foreach": "@outputs('Coordinatori_distinti')",
+            "actions": {
+              "Righe_coordinatore": {
+                "type": "Query",
+                "runAfter": {},
+                "inputs": {
+                  "from": "@body('Righe_riepilogo')",
+                  "where": "@equals(item()?['coord'], items('Per_ogni_coordinatore'))"
+                }
+              },
+              "Xml_coordinatore": {
+                "type": "Compose",
+                "runAfter": {
+                  "Righe_coordinatore": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": "@xml(json(concat('{\"r\":{\"x\":', string(body('Righe_coordinatore')), '}}')))"
+              },
+              "Lavoratori_coordinatore": {
+                "type": "Select",
+                "runAfter": {
+                  "Xml_coordinatore": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "from": "@body('Righe_coordinatore')",
+                  "select": "@item()?['login']"
+                }
+              },
+              "Totali_coordinatore": {
+                "type": "Compose",
+                "runAfter": {
+                  "Lavoratori_coordinatore": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "richieste": "@length(body('Righe_coordinatore'))",
+                  "lavoratori": "@length(union(body('Lavoratori_coordinatore'), body('Lavoratori_coordinatore')))",
+                  "f": "@float(formatNumber(xpath(outputs('Xml_coordinatore'), 'sum(/r/x/f)'), '0.00', 'en-US'))",
+                  "rr": "@float(formatNumber(xpath(outputs('Xml_coordinatore'), 'sum(/r/x/rr)'), '0.00', 'en-US'))",
+                  "gr": "@float(formatNumber(xpath(outputs('Xml_coordinatore'), 'sum(/r/x/gr)'), '0.00', 'en-US'))",
+                  "rc": "@float(formatNumber(xpath(outputs('Xml_coordinatore'), 'sum(/r/x/rc)'), '0.00', 'en-US'))",
+                  "gc": "@float(formatNumber(xpath(outputs('Xml_coordinatore'), 'sum(/r/x/gc)'), '0.00', 'en-US'))",
+                  "rh": "@float(formatNumber(xpath(outputs('Xml_coordinatore'), 'sum(/r/x/rh)'), '0.00', 'en-US'))",
+                  "gh": "@float(formatNumber(xpath(outputs('Xml_coordinatore'), 'sum(/r/x/gh)'), '0.00', 'en-US'))",
+                  "aperte": "@int(formatNumber(xpath(outputs('Xml_coordinatore'), 'sum(/r/x/aperta)'), '0', 'en-US'))",
+                  "respinte": "@int(formatNumber(xpath(outputs('Xml_coordinatore'), 'sum(/r/x/respinta)'), '0', 'en-US'))",
+                  "incomplete": "@int(formatNumber(xpath(outputs('Xml_coordinatore'), 'sum(/r/x/incompleta)'), '0', 'en-US'))"
+                }
+              },
+              "Html_righe_coordinatore": {
+                "type": "Select",
+                "runAfter": {
+                  "Totali_coordinatore": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "from": "@body('Righe_coordinatore')",
+                  "select": "@concat('<tr style=\"background:', item()?['colore'], '\">', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', item()?['richiesta'], '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', replace(replace(replace(string(coalesce(item()?['lavoratore'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', replace(replace(replace(string(coalesce(item()?['corso'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', item()?['data'], '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['f'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['rr'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['gr'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['rc'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['gc'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['rh'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['gh'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', replace(replace(replace(string(coalesce(item()?['stato'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', if(empty(item()?['etichette']), '', substring(item()?['etichette'], 0, sub(length(item()?['etichette']), 3))), '</td></tr>')"
+                }
+              },
+              "Se_coordinatore_presente": {
+                "type": "If",
+                "runAfter": {
+                  "Html_righe_coordinatore": [
+                    "Succeeded"
+                  ]
+                },
+                "expression": {
+                  "and": [
+                    {
+                      "equals": [
+                        "@not(empty(items('Per_ogni_coordinatore')))",
+                        true
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Email_riepilogo_coordinatore": {
+                    "type": "OpenApiConnection",
+                    "runAfter": {},
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_office365",
+                        "operationId": "SendEmailV2",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                      },
+                      "parameters": {
+                        "emailMessage/To": "@{first(body('Righe_coordinatore'))?['coordEmail']}",
+                        "emailMessage/Subject": "Riepilogo mensile formazione del tuo gruppo – @{concat(createArray('gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre')[sub(outputs('Mese_riferimento'), 1)], ' ', string(outputs('Anno_riferimento')))}",
+                        "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Riepilogo mensile – @{concat(createArray('gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre')[sub(outputs('Mese_riferimento'), 1)], ' ', string(outputs('Anno_riferimento')))}</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Riepilogo delle richieste di formazione del tuo gruppo con data nel mese di @{concat(createArray('gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre')[sub(outputs('Mese_riferimento'), 1)], ' ', string(outputs('Anno_riferimento')))}. Le richieste aperte, respinte o incomplete sono evidenziate.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{string(outputs('Totali_coordinatore')?['richieste'])}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Lavoratori coinvolti</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{string(outputs('Totali_coordinatore')?['lavoratori'])}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore frequentate</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(outputs('Totali_coordinatore')?['f'], '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite / gettone richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(outputs('Totali_coordinatore')?['rr'], '0.##', 'it-IT')} / @{formatNumber(outputs('Totali_coordinatore')?['gr'], '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite / gettone riconosciute dai coordinatori</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(outputs('Totali_coordinatore')?['rc'], '0.##', 'it-IT')} / @{formatNumber(outputs('Totali_coordinatore')?['gc'], '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite / gettone approvate da HR</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{formatNumber(outputs('Totali_coordinatore')?['rh'], '0.##', 'it-IT')} / @{formatNumber(outputs('Totali_coordinatore')?['gh'], '0.##', 'it-IT')}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste aperte</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><span style=\"color:#CA5010;font-weight:600\">@{string(outputs('Totali_coordinatore')?['aperte'])}</span></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste respinte</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><span style=\"color:#D13438;font-weight:600\">@{string(outputs('Totali_coordinatore')?['respinte'])}</span></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste incomplete (attestato mancante, anomalie, duplicati)</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{string(outputs('Totali_coordinatore')?['incomplete'])}</td></tr></table><p style=\"margin:0 0 8px 0;font-size:12px;color:#605E5C\">Righe evidenziate: <span style=\"background:#FFF4CE;padding:1px 6px\">aperte</span> <span style=\"background:#FDE7E9;padding:1px 6px\">respinte</span> <span style=\"background:#F3F2F1;padding:1px 6px\">incomplete</span></p><table style=\"border-collapse:collapse;width:100%;font-size:12px;margin:0 0 16px 0\"><tr><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Richiesta</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Lavoratore</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Corso</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Data</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Ore freq.</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Retr. rich.</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Gett. rich.</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Retr. coord.</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Gett. coord.</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Retr. HR</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Gett. HR</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Stato</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Evidenza</th></tr>@{join(body('Html_righe_coordinatore'), '')}</table><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Configurazione')?['AppUrl']}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'app</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                        "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                        "emailMessage/Importance": "Normal"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    }
+                  },
+                  "Annota_email_non_inviata": {
+                    "type": "AppendToArrayVariable",
+                    "runAfter": {
+                      "Email_riepilogo_coordinatore": [
+                        "Failed",
+                        "TimedOut"
+                      ]
+                    },
+                    "inputs": {
+                      "name": "EmailNonInviate",
+                      "value": "@first(body('Righe_coordinatore'))?['coordEmail']"
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {}
+                }
+              },
+              "Aggiungi_totali_coordinatore": {
+                "type": "AppendToArrayVariable",
+                "runAfter": {
+                  "Se_coordinatore_presente": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "name": "TotaliCoordinatori",
+                  "value": {
+                    "coordinatore": "@first(body('Righe_coordinatore'))?['coordNome']",
+                    "richieste": "@outputs('Totali_coordinatore')?['richieste']",
+                    "lavoratori": "@outputs('Totali_coordinatore')?['lavoratori']",
+                    "oreFrequentate": "@formatNumber(outputs('Totali_coordinatore')?['f'], '0.##', 'it-IT')",
+                    "retribuiteRichieste": "@formatNumber(outputs('Totali_coordinatore')?['rr'], '0.##', 'it-IT')",
+                    "gettoneRichieste": "@formatNumber(outputs('Totali_coordinatore')?['gr'], '0.##', 'it-IT')",
+                    "retribuiteCoord": "@formatNumber(outputs('Totali_coordinatore')?['rc'], '0.##', 'it-IT')",
+                    "gettoneCoord": "@formatNumber(outputs('Totali_coordinatore')?['gc'], '0.##', 'it-IT')",
+                    "retribuiteHR": "@formatNumber(outputs('Totali_coordinatore')?['rh'], '0.##', 'it-IT')",
+                    "gettoneHR": "@formatNumber(outputs('Totali_coordinatore')?['gh'], '0.##', 'it-IT')",
+                    "aperte": "@outputs('Totali_coordinatore')?['aperte']",
+                    "respinte": "@outputs('Totali_coordinatore')?['respinte']",
+                    "incomplete": "@outputs('Totali_coordinatore')?['incomplete']"
+                  }
+                }
+              }
+            },
+            "runtimeConfiguration": {
+              "concurrency": {
+                "repetitions": 5
+              }
+            }
+          },
+          "Xml_generale": {
+            "type": "Compose",
+            "runAfter": {
+              "Per_ogni_coordinatore": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@xml(json(concat('{\"r\":{\"x\":', string(body('Righe_riepilogo')), '}}')))"
+          },
+          "Lavoratori_mese": {
+            "type": "Select",
+            "runAfter": {
+              "Xml_generale": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Righe_riepilogo')",
+              "select": "@item()?['login']"
+            }
+          },
+          "Totali_generali": {
+            "type": "Compose",
+            "runAfter": {
+              "Lavoratori_mese": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "richieste": "@length(body('Righe_riepilogo'))",
+              "lavoratori": "@length(union(body('Lavoratori_mese'), body('Lavoratori_mese')))",
+              "f": "@float(formatNumber(xpath(outputs('Xml_generale'), 'sum(/r/x/f)'), '0.00', 'en-US'))",
+              "rr": "@float(formatNumber(xpath(outputs('Xml_generale'), 'sum(/r/x/rr)'), '0.00', 'en-US'))",
+              "gr": "@float(formatNumber(xpath(outputs('Xml_generale'), 'sum(/r/x/gr)'), '0.00', 'en-US'))",
+              "rc": "@float(formatNumber(xpath(outputs('Xml_generale'), 'sum(/r/x/rc)'), '0.00', 'en-US'))",
+              "gc": "@float(formatNumber(xpath(outputs('Xml_generale'), 'sum(/r/x/gc)'), '0.00', 'en-US'))",
+              "rh": "@float(formatNumber(xpath(outputs('Xml_generale'), 'sum(/r/x/rh)'), '0.00', 'en-US'))",
+              "gh": "@float(formatNumber(xpath(outputs('Xml_generale'), 'sum(/r/x/gh)'), '0.00', 'en-US'))",
+              "aperte": "@int(formatNumber(xpath(outputs('Xml_generale'), 'sum(/r/x/aperta)'), '0', 'en-US'))",
+              "respinte": "@int(formatNumber(xpath(outputs('Xml_generale'), 'sum(/r/x/respinta)'), '0', 'en-US'))",
+              "incomplete": "@int(formatNumber(xpath(outputs('Xml_generale'), 'sum(/r/x/incompleta)'), '0', 'en-US'))"
+            }
+          },
+          "Righe_evidenziate": {
+            "type": "Query",
+            "runAfter": {
+              "Totali_generali": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Righe_riepilogo')",
+              "where": "@not(empty(item()?['etichette']))"
+            }
+          },
+          "Html_righe_evidenziate": {
+            "description": "Al massimo 300 righe nel corpo: l'elenco completo è nel CSV allegato.",
+            "type": "Select",
+            "runAfter": {
+              "Righe_evidenziate": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@take(body('Righe_evidenziate'), 300)",
+              "select": "@concat('<tr style=\"background:', item()?['colore'], '\">', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', item()?['richiesta'], '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', replace(replace(replace(string(coalesce(item()?['lavoratore'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', replace(replace(replace(string(coalesce(item()?['coordNome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', replace(replace(replace(string(coalesce(item()?['corso'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', item()?['data'], '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['f'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['rr'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['gr'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['rc'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['gc'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['rh'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top;text-align:right\">', formatNumber(item()?['gh'], '0.##', 'it-IT'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', replace(replace(replace(string(coalesce(item()?['stato'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '</td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">', if(empty(item()?['etichette']), '', substring(item()?['etichette'], 0, sub(length(item()?['etichette']), 3))), '</td></tr>')"
+            }
+          },
+          "Tabella_totali_coordinatori": {
+            "type": "Table",
+            "runAfter": {
+              "Html_righe_evidenziate": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@variables('TotaliCoordinatori')",
+              "format": "HTML",
+              "columns": [
+                {
+                  "header": "Coordinatore",
+                  "value": "@item()?['coordinatore']"
+                },
+                {
+                  "header": "Richieste",
+                  "value": "@item()?['richieste']"
+                },
+                {
+                  "header": "Lavoratori",
+                  "value": "@item()?['lavoratori']"
+                },
+                {
+                  "header": "Ore freq.",
+                  "value": "@item()?['oreFrequentate']"
+                },
+                {
+                  "header": "Retr. rich.",
+                  "value": "@item()?['retribuiteRichieste']"
+                },
+                {
+                  "header": "Gett. rich.",
+                  "value": "@item()?['gettoneRichieste']"
+                },
+                {
+                  "header": "Retr. coord.",
+                  "value": "@item()?['retribuiteCoord']"
+                },
+                {
+                  "header": "Gett. coord.",
+                  "value": "@item()?['gettoneCoord']"
+                },
+                {
+                  "header": "Retr. HR",
+                  "value": "@item()?['retribuiteHR']"
+                },
+                {
+                  "header": "Gett. HR",
+                  "value": "@item()?['gettoneHR']"
+                },
+                {
+                  "header": "Aperte",
+                  "value": "@item()?['aperte']"
+                },
+                {
+                  "header": "Respinte",
+                  "value": "@item()?['respinte']"
+                },
+                {
+                  "header": "Incomplete",
+                  "value": "@item()?['incomplete']"
+                }
+              ]
+            }
+          },
+          "Righe_csv_quadro": {
+            "type": "Select",
+            "runAfter": {
+              "Tabella_totali_coordinatori": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Righe_riepilogo')",
+              "select": "@concat(concat('\"', replace(string(coalesce(item()?['richiesta'], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['lavoratore'], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['area'], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['servizio'], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['centroDiCosto'], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['coordNome'], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['codiceCorso'], '')), '\"', '\"\"'), '\"'), ';', concat('\"', replace(string(coalesce(item()?['corso'], '')), '\"', '\"\"'), '\"'), ';', item()?['data'], ';', concat('\"', replace(string(coalesce(item()?['stato'], '')), '\"', '\"\"'), '\"'), ';', replace(string(item()?['f']), '.', ','), ';', replace(string(item()?['rr']), '.', ','), ';', replace(string(item()?['gr']), '.', ','), ';', replace(string(item()?['rc']), '.', ','), ';', replace(string(item()?['gc']), '.', ','), ';', replace(string(item()?['rh']), '.', ','), ';', replace(string(item()?['gh']), '.', ','), ';', concat('\"', replace(string(coalesce(if(empty(item()?['etichette']), '', substring(item()?['etichette'], 0, sub(length(item()?['etichette']), 3))), '')), '\"', '\"\"'), '\"'))"
+            }
+          },
+          "Csv_quadro_completo": {
+            "type": "Compose",
+            "runAfter": {
+              "Righe_csv_quadro": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@concat(decodeUriComponent('%EF%BB%BF'), 'ID richiesta;Lavoratore;Area;Servizio;Centro di costo;Coordinatore;Codice corso;Titolo corso;Data;Stato;Ore frequentate;Ore retribuite richieste;Ore gettone richieste;Ore retribuite coordinatore;Ore gettone coordinatore;Ore retribuite HR;Ore gettone HR;Evidenza', decodeUriComponent('%0D%0A'), join(body('Righe_csv_quadro'), decodeUriComponent('%0D%0A')), decodeUriComponent('%0D%0A'))"
+          },
+          "Email_riepilogo_HR": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Csv_quadro_completo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_office365",
+                "operationId": "SendEmailV2",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+              },
+              "parameters": {
+                "emailMessage/To": "@{outputs('Configurazione')?['EmailHR']}",
+                "emailMessage/Subject": "Quadro mensile della formazione – @{concat(createArray('gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre')[sub(outputs('Mese_riferimento'), 1)], ' ', string(outputs('Anno_riferimento')))}",
+                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Quadro mensile – @{concat(createArray('gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre')[sub(outputs('Mese_riferimento'), 1)], ' ', string(outputs('Anno_riferimento')))}</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Quadro completo delle richieste di formazione con data nel mese di @{concat(createArray('gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre')[sub(outputs('Mese_riferimento'), 1)], ' ', string(outputs('Anno_riferimento')))} (escluse bozze e annullate). Il file CSV allegato contiene tutte le richieste.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{string(outputs('Totali_generali')?['richieste'])}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Lavoratori coinvolti</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{string(outputs('Totali_generali')?['lavoratori'])}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore frequentate</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(outputs('Totali_generali')?['f'], '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite / gettone richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(outputs('Totali_generali')?['rr'], '0.##', 'it-IT')} / @{formatNumber(outputs('Totali_generali')?['gr'], '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite / gettone riconosciute dai coordinatori</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(outputs('Totali_generali')?['rc'], '0.##', 'it-IT')} / @{formatNumber(outputs('Totali_generali')?['gc'], '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite / gettone approvate da HR</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{formatNumber(outputs('Totali_generali')?['rh'], '0.##', 'it-IT')} / @{formatNumber(outputs('Totali_generali')?['gh'], '0.##', 'it-IT')}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste aperte</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><span style=\"color:#CA5010;font-weight:600\">@{string(outputs('Totali_generali')?['aperte'])}</span></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste respinte</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><span style=\"color:#D13438;font-weight:600\">@{string(outputs('Totali_generali')?['respinte'])}</span></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste incomplete (attestato mancante, anomalie, duplicati)</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{string(outputs('Totali_generali')?['incomplete'])}</td></tr></table>@{if(empty(variables('EmailNonInviate')), '', concat('<div style=\"margin:0 0 16px 0;padding:10px 14px;background:#FDE7E9;border-left:4px solid #D13438\">Riepilogo non recapitato a: ', join(variables('EmailNonInviate'), ', '), '</div>'))}<p style=\"margin:16px 0 8px 0;font-weight:600;color:#005E7D\">Totali per coordinatore</p>@{replace(replace(replace(body('Tabella_totali_coordinatori'), '<table>', '<table style=\"border-collapse:collapse;width:100%;font-size:13px;margin:0 0 16px 0\">'), '<th>', '<th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">'), '<td>', '<td style=\"padding:6px 8px;border:1px solid #E1DFDD;vertical-align:top\">')}<p style=\"margin:16px 0 8px 0;font-weight:600;color:#005E7D\">Richieste da seguire (aperte, respinte, incomplete): @{string(length(body('Righe_evidenziate')))}</p><p style=\"margin:0 0 8px 0;font-size:12px;color:#605E5C\">Righe evidenziate: <span style=\"background:#FFF4CE;padding:1px 6px\">aperte</span> <span style=\"background:#FDE7E9;padding:1px 6px\">respinte</span> <span style=\"background:#F3F2F1;padding:1px 6px\">incomplete</span></p><table style=\"border-collapse:collapse;width:100%;font-size:12px;margin:0 0 16px 0\"><tr><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Richiesta</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Lavoratore</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Coordinatore</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Corso</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Data</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Ore freq.</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Retr. rich.</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Gett. rich.</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Retr. coord.</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Gett. coord.</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Retr. HR</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Gett. HR</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Stato</th><th style=\"padding:6px 8px;background:#F3F2F1;border:1px solid #E1DFDD;text-align:left;font-weight:600\">Evidenza</th></tr>@{join(body('Html_righe_evidenziate'), '')}</table><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Configurazione')?['AppUrl']}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'app</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                "emailMessage/Attachments": [
+                  {
+                    "Name": "@{concat('Riepilogo_formazione_', string(outputs('Anno_riferimento')), '-', formatNumber(outputs('Mese_riferimento'), '00'), '.csv')}",
+                    "ContentBytes": "@{base64(outputs('Csv_quadro_completo'))}"
+                  }
+                ],
+                "emailMessage/Importance": "Normal"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          }
+        }
+      },
+      "Errore": {
+        "description": "Eseguito solo se 'Prova' non riesce: risponde con un errore generico e avvisa HR.",
+        "type": "Scope",
+        "runAfter": {
+          "Prova": [
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "actions": {
+          "Link_esecuzione": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": "@concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])"
+          },
+          "Azioni_non_riuscite": {
+            "type": "Query",
+            "runAfter": {
+              "Link_esecuzione": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@result('Prova')",
+              "where": "@equals(item()?['status'], 'Failed')"
+            }
+          },
+          "Dettaglio_azioni_non_riuscite": {
+            "type": "Select",
+            "runAfter": {
+              "Azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Azioni_non_riuscite')",
+              "select": "@concat(item()?['name'], ': ', coalesce(item()?['error']?['message'], item()?['code'], ''))"
+            }
+          },
+          "Avvisa_HR_errore": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Dettaglio_azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_office365",
+                "operationId": "SendEmailV2",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+              },
+              "parameters": {
+                "emailMessage/To": "@{outputs('Configurazione')?['EmailHR']}",
+                "emailMessage/Subject": "Errore nel flusso @{workflow()?['tags']?['flowDisplayName']}",
+                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Errore in un flusso</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Un flusso dell'app non è stato completato. Apri l'esecuzione per i dettagli.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Flusso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{workflow()?['tags']?['flowDisplayName']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data e ora</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{convertFromUtc(utcNow(), 'W. Europe Standard Time', 'dd/MM/yyyy HH:mm')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Azioni non riuscite</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(join(body('Dettaglio_azioni_non_riuscite'), ' | '), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr></table><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Link_esecuzione')}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'esecuzione</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                "emailMessage/Importance": "High"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Termina_con_errore": {
+            "type": "Terminate",
+            "runAfter": {
+              "Avvisa_HR_errore": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": {
+              "runStatus": "Failed",
+              "runError": {
+                "code": "ErroreFlusso",
+                "message": "Errore nel blocco Prova: vedere le azioni non riuscite."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,1096 @@
+{
+  "name": "SDF_API07_EsitoHR",
+  "description": "API07 – HR o Amministratore valida, respinge o chiede integrazione su una o più richieste (requisito Flusso 3). Oltre 25 richieste risponde subito e invia il riepilogo per e-mail. Parametro: dati (JSON).",
+  "connectionReferences": {
+    "shared_sharepointonline": {
+      "connectionName": "shared-sharepointonl-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "tier": "NotSpecified"
+    },
+    "shared_office365": {
+      "connectionName": "shared-office365-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365",
+      "tier": "NotSpecified"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      },
+      "$authentication": {
+        "defaultValue": {},
+        "type": "SecureObject"
+      }
+    },
+    "triggers": {
+      "manual": {
+        "type": "Request",
+        "kind": "PowerAppV2",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "title": "dati",
+                "type": "string",
+                "x-ms-dynamically-added": true,
+                "description": "JSON: {\"azione\":\"valida|respingi|integrazione\",\"nota\":\"\",\"richieste\":[{\"id\":123,\"oreRetribuite\":-1,\"oreGettone\":-1}]}",
+                "x-ms-content-hint": "TEXT"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Inizializza_SitoUrl": {
+        "type": "InitializeVariable",
+        "runAfter": {},
+        "inputs": {
+          "variables": [
+            {
+              "name": "SitoUrl",
+              "type": "string",
+              "value": "{{SITO_URL}}"
+            }
+          ]
+        }
+      },
+      "Chiamante": {
+        "description": "Identità di chi chiama, dall'intestazione della chiamata di Power Apps.",
+        "type": "Compose",
+        "runAfter": {
+          "Inizializza_SitoUrl": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@toLower(trim(coalesce(triggerOutputs()?['headers']?['x-ms-user-email'], '')))"
+      },
+      "Chiamante_OData": {
+        "type": "Compose",
+        "runAfter": {
+          "Chiamante": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@replace(outputs('Chiamante'), '''', '''''')"
+      },
+      "Leggi_configurazione": {
+        "description": "Legge i parametri della lista Configurazione.",
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Chiamante_OData": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "@variables('SitoUrl')",
+            "table": "Configurazione",
+            "$top": 500
+          },
+          "authentication": "@parameters('$authentication')"
+        }
+      },
+      "Seleziona_configurazione": {
+        "type": "Select",
+        "runAfter": {
+          "Leggi_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Leggi_configurazione')?['value']",
+          "select": {
+            "@item()?['Title']": "@item()?['Valore']"
+          }
+        }
+      },
+      "Configurazione": {
+        "description": "Oggetto chiave/valore: outputs('Configurazione')?['EmailHR'], ?['AppUrl'], ...",
+        "type": "Compose",
+        "runAfter": {
+          "Seleziona_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@json(replace(replace(replace(string(body('Seleziona_configurazione')),'[{','{'),'}]','}'),'},{',','))"
+      },
+      "Inizializza_Elaborate": {
+        "type": "InitializeVariable",
+        "runAfter": {
+          "Configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "variables": [
+            {
+              "name": "Elaborate",
+              "type": "array",
+              "value": []
+            }
+          ]
+        }
+      },
+      "Inizializza_Scartate": {
+        "type": "InitializeVariable",
+        "runAfter": {
+          "Inizializza_Elaborate": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "variables": [
+            {
+              "name": "Scartate",
+              "type": "array",
+              "value": []
+            }
+          ]
+        }
+      },
+      "Prova": {
+        "type": "Scope",
+        "runAfter": {
+          "Inizializza_Scartate": [
+            "Succeeded"
+          ]
+        },
+        "actions": {
+          "Dati": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": "@json(triggerBody()?['text'])"
+          },
+          "Azione": {
+            "type": "Compose",
+            "runAfter": {
+              "Dati": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@toLower(trim(string(coalesce(outputs('Dati')?['azione'], ''))))"
+          },
+          "Nota": {
+            "type": "Compose",
+            "runAfter": {
+              "Azione": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@trim(string(coalesce(outputs('Dati')?['nota'], '')))"
+          },
+          "Richieste_da_elaborare": {
+            "type": "Compose",
+            "runAfter": {
+              "Nota": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@coalesce(outputs('Dati')?['richieste'], json('[]'))"
+          },
+          "Leggi_ruoli_chiamante": {
+            "description": "Ruoli applicativi attivi del chiamante.",
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Richieste_da_elaborare": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Ruoli applicativi",
+                "$filter": "Title eq '@{outputs('Chiamante_OData')}' and Attivo eq 1",
+                "$top": 10
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Leggi_mesi_chiusi": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Richieste_da_elaborare": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Chiusure mensili",
+                "$filter": "StatoPeriodo eq 'Chiuso'",
+                "$top": 1000
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Ruoli_chiamante": {
+            "type": "Select",
+            "runAfter": {
+              "Leggi_ruoli_chiamante": [
+                "Succeeded"
+              ],
+              "Leggi_mesi_chiusi": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_ruoli_chiamante')?['value']",
+              "select": "@item()?['Ruolo']?['Value']"
+            }
+          },
+          "Elenco_mesi_chiusi": {
+            "type": "Select",
+            "runAfter": {
+              "Ruoli_chiamante": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_mesi_chiusi')?['value']",
+              "select": "@item()?['Title']"
+            }
+          },
+          "Ruolo_registro": {
+            "type": "Compose",
+            "runAfter": {
+              "Elenco_mesi_chiusi": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@if(contains(body('Ruoli_chiamante'), 'Formazione HR'), 'Formazione HR', 'Amministratore')"
+          },
+          "Controlli_HR": {
+            "type": "Compose",
+            "runAfter": {
+              "Ruolo_registro": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@if(not(or(contains(body('Ruoli_chiamante'), 'Formazione HR'), contains(body('Ruoli_chiamante'), 'Amministratore'))), 'Operazione riservata all''Ufficio HR/Formazione e agli amministratori.', if(not(contains(createArray('valida', 'respingi', 'integrazione'), outputs('Azione'))), 'Azione non valida.', if(and(equals(outputs('Azione'), 'respingi'), empty(outputs('Nota'))), 'La motivazione è obbligatoria per respingere le richieste.', if(and(equals(outputs('Azione'), 'integrazione'), empty(outputs('Nota'))), 'Indica che cosa deve essere integrato o corretto.', if(equals(length(outputs('Richieste_da_elaborare')), 0), 'Nessuna richiesta selezionata.', '')))))"
+          },
+          "Se_controlli_HR_non_superati": {
+            "type": "If",
+            "runAfter": {
+              "Controlli_HR": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@not(empty(outputs('Controlli_HR')))",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Rispondi_controlli_HR_non_superati": {
+                "type": "Response",
+                "kind": "PowerApp",
+                "runAfter": {},
+                "inputs": {
+                  "statusCode": 200,
+                  "body": {
+                    "esito": "ERRORE",
+                    "messaggio": "@{outputs('Controlli_HR')}",
+                    "dati": "{}"
+                  },
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "esito": {
+                        "title": "esito",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "messaggio": {
+                        "title": "messaggio",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "dati": {
+                        "title": "dati",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "Termina_controlli_HR_non_superati": {
+                "type": "Terminate",
+                "runAfter": {
+                  "Rispondi_controlli_HR_non_superati": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "runStatus": "Succeeded"
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Testi_esito": {
+            "description": "Testi e stato di arrivo secondo l'azione.",
+            "type": "Compose",
+            "runAfter": {
+              "Se_controlli_HR_non_superati": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "stato": "@if(equals(outputs('Azione'), 'valida'), 'Validata da HR', if(equals(outputs('Azione'), 'respingi'), 'Respinta da HR', 'Integrazione richiesta da HR'))",
+              "colore": "@if(equals(outputs('Azione'), 'valida'), '#107C10', if(equals(outputs('Azione'), 'respingi'), '#D13438', '#CA5010'))",
+              "azioneRegistro": "@if(equals(outputs('Azione'), 'valida'), 'Validazione HR', if(equals(outputs('Azione'), 'respingi'), 'Respinta da HR', 'Integrazione richiesta da HR'))",
+              "oggetto": "@if(equals(outputs('Azione'), 'valida'), 'Richiesta di formazione validata', if(equals(outputs('Azione'), 'respingi'), 'Richiesta di formazione respinta da HR', 'Integrazione richiesta da HR'))",
+              "titoloLavoratore": "@if(equals(outputs('Azione'), 'valida'), 'La tua richiesta è stata validata dall''Ufficio HR/Formazione', if(equals(outputs('Azione'), 'respingi'), 'La tua richiesta è stata respinta dall''Ufficio HR/Formazione', 'L''Ufficio HR/Formazione chiede di integrare la tua richiesta'))",
+              "introLavoratore": "@if(equals(outputs('Azione'), 'valida'), 'Le ore qui sotto sono riconosciute in via definitiva e saranno comunicate all''Ufficio Paghe con la chiusura del mese.', if(equals(outputs('Azione'), 'respingi'), 'La richiesta non può essere accolta. Trovi la motivazione qui sotto.', 'Apri la richiesta, correggi o completa i dati indicati nella nota e inviala di nuovo: tornerà al tuo coordinatore.'))",
+              "titoloCoordinatore": "@if(equals(outputs('Azione'), 'valida'), 'Richiesta validata da HR', if(equals(outputs('Azione'), 'respingi'), 'Richiesta respinta da HR', 'Integrazione richiesta da HR'))",
+              "introCoordinatore": "@if(equals(outputs('Azione'), 'valida'), 'L''Ufficio HR/Formazione ha validato una richiesta di un lavoratore del tuo team.', if(equals(outputs('Azione'), 'respingi'), 'L''Ufficio HR/Formazione ha respinto una richiesta di un lavoratore del tuo team.', 'L''Ufficio HR/Formazione ha chiesto al lavoratore un''integrazione: dopo la correzione la richiesta tornerà a te.'))",
+              "notaTitolo": "@if(equals(outputs('Azione'), 'valida'), 'Nota HR', if(equals(outputs('Azione'), 'respingi'), 'Motivazione', 'Che cosa integrare'))"
+            }
+          },
+          "Se_elaborazione_lunga": {
+            "description": "Oltre 25 richieste: risponde subito (limite di 120 secondi di Power Apps) e prosegue.",
+            "type": "If",
+            "runAfter": {
+              "Testi_esito": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@greater(length(outputs('Richieste_da_elaborare')), 25)",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Dati_avvio_elaborazione": {
+                "type": "Compose",
+                "runAfter": {},
+                "inputs": {
+                  "elaborate": 0,
+                  "scartate": [],
+                  "inElaborazione": "@length(outputs('Richieste_da_elaborare'))"
+                }
+              },
+              "Rispondi_avvio_elaborazione": {
+                "type": "Response",
+                "kind": "PowerApp",
+                "runAfter": {
+                  "Dati_avvio_elaborazione": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "statusCode": 200,
+                  "body": {
+                    "esito": "OK",
+                    "messaggio": "@{concat('Elaborazione avviata per ', string(length(outputs('Richieste_da_elaborare'))), ' richieste: riceverai un''e-mail con l''esito.')}",
+                    "dati": "@string(outputs('Dati_avvio_elaborazione'))"
+                  },
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "esito": {
+                        "title": "esito",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "messaggio": {
+                        "title": "messaggio",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "dati": {
+                        "title": "dati",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Per_ogni_richiesta": {
+            "description": "Ogni richiesta: controlli, aggiornamento, registro, e-mail a lavoratore e coordinatore.",
+            "type": "Foreach",
+            "runAfter": {
+              "Se_elaborazione_lunga": [
+                "Succeeded"
+              ]
+            },
+            "foreach": "@outputs('Richieste_da_elaborare')",
+            "actions": {
+              "Id_corrente": {
+                "type": "Compose",
+                "runAfter": {},
+                "inputs": "@int(coalesce(items('Per_ogni_richiesta')?['id'], 0))"
+              },
+              "Leggi_richiesta_corrente": {
+                "type": "OpenApiConnection",
+                "runAfter": {
+                  "Id_corrente": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "GetItems",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "table": "Richieste formazione",
+                    "$filter": "ID eq @{outputs('Id_corrente')}",
+                    "$top": 1
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Richiesta_corrente": {
+                "type": "Compose",
+                "runAfter": {
+                  "Leggi_richiesta_corrente": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": "@first(body('Leggi_richiesta_corrente')?['value'])"
+              },
+              "Ore_HR": {
+                "description": "-1 = usa le ore riconosciute dal coordinatore.",
+                "type": "Compose",
+                "runAfter": {
+                  "Richiesta_corrente": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "retribuite": "@if(equals(float(coalesce(items('Per_ogni_richiesta')?['oreRetribuite'], -1)), -1), float(coalesce(outputs('Richiesta_corrente')?['OreRetribuiteCoord'], 0)), float(formatNumber(float(coalesce(items('Per_ogni_richiesta')?['oreRetribuite'], 0)), '0.00', 'en-US')))",
+                  "gettone": "@if(equals(float(coalesce(items('Per_ogni_richiesta')?['oreGettone'], -1)), -1), float(coalesce(outputs('Richiesta_corrente')?['OreGettoneCoord'], 0)), float(formatNumber(float(coalesce(items('Per_ogni_richiesta')?['oreGettone'], 0)), '0.00', 'en-US')))"
+                }
+              },
+              "Motivo_scarto": {
+                "description": "Vuoto = la richiesta può essere elaborata.",
+                "type": "Compose",
+                "runAfter": {
+                  "Ore_HR": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": "@if(empty(outputs('Richiesta_corrente')), 'Richiesta non trovata', if(not(equals(coalesce(outputs('Richiesta_corrente')?['Stato']?['Value'], ''), 'In attesa di validazione HR')), concat('Stato non valido: ', coalesce(outputs('Richiesta_corrente')?['Stato']?['Value'], '')), if(equals(toLower(coalesce(outputs('Richiesta_corrente')?['LavoratoreLogin'], '')), outputs('Chiamante')), 'Non è possibile decidere su una propria richiesta', if(contains(body('Elenco_mesi_chiusi'), if(empty(outputs('Richiesta_corrente')?['AnnoCompetenza']), '', concat(string(outputs('Richiesta_corrente')?['AnnoCompetenza']), '-', formatNumber(coalesce(outputs('Richiesta_corrente')?['MeseCompetenza'], 0), '00')))), 'Mese chiuso', if(and(equals(outputs('Azione'), 'valida'), or(less(outputs('Ore_HR')?['retribuite'], 0), less(outputs('Ore_HR')?['gettone'], 0))), 'Ore negative', if(and(equals(outputs('Azione'), 'valida'), greater(float(formatNumber(float(add(outputs('Ore_HR')?['retribuite'], outputs('Ore_HR')?['gettone'])), '0.00', 'en-US')), float(coalesce(outputs('Richiesta_corrente')?['OreFrequentate'], 0)))), 'Ore riconosciute superiori alle ore frequentate', ''))))))"
+              },
+              "Se_scartata": {
+                "type": "If",
+                "runAfter": {
+                  "Motivo_scarto": [
+                    "Succeeded"
+                  ]
+                },
+                "expression": {
+                  "and": [
+                    {
+                      "equals": [
+                        "@not(empty(outputs('Motivo_scarto')))",
+                        true
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Aggiungi_scartata": {
+                    "type": "AppendToArrayVariable",
+                    "runAfter": {},
+                    "inputs": {
+                      "name": "Scartate",
+                      "value": {
+                        "id": "@outputs('Id_corrente')",
+                        "idRichiesta": "@coalesce(outputs('Richiesta_corrente')?['Title'], '')",
+                        "motivo": "@outputs('Motivo_scarto')"
+                      }
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Aggiorna_esito_HR": {
+                      "type": "OpenApiConnection",
+                      "runAfter": {},
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "PatchItem",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@variables('SitoUrl')",
+                          "table": "Richieste formazione",
+                          "id": "@outputs('Id_corrente')",
+                          "item/Title": "@outputs('Richiesta_corrente')?['Title']",
+                          "item/Stato/Value": "@outputs('Testi_esito')?['stato']",
+                          "item/NoteHR": "@if(empty(outputs('Nota')), outputs('Richiesta_corrente')?['NoteHR'], outputs('Nota'))",
+                          "item/OreRetribuiteHR": "@if(equals(outputs('Azione'), 'valida'), outputs('Ore_HR')?['retribuite'], outputs('Richiesta_corrente')?['OreRetribuiteHR'])",
+                          "item/OreGettoneHR": "@if(equals(outputs('Azione'), 'valida'), outputs('Ore_HR')?['gettone'], outputs('Richiesta_corrente')?['OreGettoneHR'])",
+                          "item/DataValidazioneHR": "@if(equals(outputs('Azione'), 'valida'), utcNow(), outputs('Richiesta_corrente')?['DataValidazioneHR'])",
+                          "item/UltimaModificaDa": "@outputs('Chiamante')"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      }
+                    },
+                    "Registro_esito_HR": {
+                      "type": "OpenApiConnection",
+                      "runAfter": {
+                        "Aggiorna_esito_HR": [
+                          "Succeeded"
+                        ]
+                      },
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "PostItem",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@variables('SitoUrl')",
+                          "table": "Registro modifiche",
+                          "item/Title": "@{outputs('Testi_esito')?['azioneRegistro']}",
+                          "item/RichiestaRif": "@outputs('Id_corrente')",
+                          "item/IdRichiesta": "@{outputs('Richiesta_corrente')?['Title']}",
+                          "item/Tabella": "Richieste formazione",
+                          "item/IdRecord": "@{string(outputs('Id_corrente'))}",
+                          "item/Campo": "Stato",
+                          "item/ValorePrecedente": "In attesa di validazione HR",
+                          "item/ValoreNuovo": "@{outputs('Testi_esito')?['stato']}",
+                          "item/Ruolo/Value": "@outputs('Ruolo_registro')",
+                          "item/LoginAutore": "@outputs('Chiamante')",
+                          "item/Nota": "@{outputs('Nota')}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      }
+                    },
+                    "Variazioni_ore_HR": {
+                      "type": "Compose",
+                      "runAfter": {
+                        "Registro_esito_HR": [
+                          "Succeeded"
+                        ]
+                      },
+                      "inputs": [
+                        {
+                          "campo": "OreRetribuiteHR",
+                          "prima": "@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreRetribuiteCoord'], 0)), '0.##', 'it-IT')}",
+                          "dopo": "@{formatNumber(float(coalesce(outputs('Ore_HR')?['retribuite'], 0)), '0.##', 'it-IT')}"
+                        },
+                        {
+                          "campo": "OreGettoneHR",
+                          "prima": "@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreGettoneCoord'], 0)), '0.##', 'it-IT')}",
+                          "dopo": "@{formatNumber(float(coalesce(outputs('Ore_HR')?['gettone'], 0)), '0.##', 'it-IT')}"
+                        }
+                      ]
+                    },
+                    "Variazioni_ore_HR_effettive": {
+                      "type": "Query",
+                      "runAfter": {
+                        "Variazioni_ore_HR": [
+                          "Succeeded"
+                        ]
+                      },
+                      "inputs": {
+                        "from": "@outputs('Variazioni_ore_HR')",
+                        "where": "@and(equals(outputs('Azione'), 'valida'), not(equals(item()?['prima'], item()?['dopo'])))"
+                      }
+                    },
+                    "Registra_variazioni_ore_HR": {
+                      "type": "Foreach",
+                      "runAfter": {
+                        "Variazioni_ore_HR_effettive": [
+                          "Succeeded"
+                        ]
+                      },
+                      "foreach": "@body('Variazioni_ore_HR_effettive')",
+                      "actions": {
+                        "Registro_variazione_ore_HR": {
+                          "type": "OpenApiConnection",
+                          "runAfter": {},
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "PostItem",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@variables('SitoUrl')",
+                              "table": "Registro modifiche",
+                              "item/Title": "Variazione ore riconosciute da HR",
+                              "item/RichiestaRif": "@outputs('Id_corrente')",
+                              "item/IdRichiesta": "@{outputs('Richiesta_corrente')?['Title']}",
+                              "item/Tabella": "Richieste formazione",
+                              "item/IdRecord": "@{string(outputs('Id_corrente'))}",
+                              "item/Campo": "@items('Registra_variazioni_ore_HR')?['campo']",
+                              "item/ValorePrecedente": "@items('Registra_variazioni_ore_HR')?['prima']",
+                              "item/ValoreNuovo": "@items('Registra_variazioni_ore_HR')?['dopo']",
+                              "item/Ruolo/Value": "@outputs('Ruolo_registro')",
+                              "item/LoginAutore": "@outputs('Chiamante')",
+                              "item/Nota": "Valore precedente = ore riconosciute dal coordinatore"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          }
+                        }
+                      }
+                    },
+                    "Se_email_lavoratore_esito_HR": {
+                      "type": "If",
+                      "runAfter": {
+                        "Registra_variazioni_ore_HR": [
+                          "Succeeded"
+                        ]
+                      },
+                      "expression": {
+                        "and": [
+                          {
+                            "equals": [
+                              "@not(empty(trim(coalesce(outputs('Richiesta_corrente')?['EmailPersonale'], ''))))",
+                              true
+                            ]
+                          }
+                        ]
+                      },
+                      "actions": {
+                        "Email_lavoratore_esito_HR": {
+                          "type": "OpenApiConnection",
+                          "runAfter": {},
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_office365",
+                              "operationId": "SendEmailV2",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                            },
+                            "parameters": {
+                              "emailMessage/To": "@{outputs('Richiesta_corrente')?['EmailPersonale']}",
+                              "emailMessage/Subject": "@{outputs('Testi_esito')?['oggetto']} – @{outputs('Richiesta_corrente')?['Title']}",
+                              "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">@{outputs('Testi_esito')?['titoloLavoratore']}</p><p style=\"margin:0 0 16px 0;line-height:1.5\">@{outputs('Testi_esito')?['introLavoratore']}</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">ID richiesta</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{outputs('Richiesta_corrente')?['Title']}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Lavoratore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(concat(outputs('Richiesta_corrente')?['Cognome'], ' ', outputs('Richiesta_corrente')?['Nome']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Servizio / centro di costo</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(outputs('Richiesta_corrente')?['Servizio'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} – @{replace(replace(replace(string(coalesce(outputs('Richiesta_corrente')?['CentroDiCosto'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Corso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(if(empty(outputs('Richiesta_corrente')?['TitoloCorsoCatalogo']), coalesce(outputs('Richiesta_corrente')?['TitoloCorsoLibero'], ''), outputs('Richiesta_corrente')?['TitoloCorsoCatalogo']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} (@{replace(replace(replace(string(coalesce(outputs('Richiesta_corrente')?['CodiceCorso'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')})</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data sessione</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{if(empty(outputs('Richiesta_corrente')?['DataSessione']), '', formatDateTime(if(empty(outputs('Richiesta_corrente')?['DataSessione']), null, if(equals(length(string(outputs('Richiesta_corrente')?['DataSessione'])), 10), string(outputs('Richiesta_corrente')?['DataSessione']), convertFromUtc(string(outputs('Richiesta_corrente')?['DataSessione']), 'W. Europe Standard Time', 'yyyy-MM-dd'))), 'dd/MM/yyyy'))}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Orario sessione</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Richiesta_corrente')?['OraInizioSessione']} – @{outputs('Richiesta_corrente')?['OraFineSessione']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Presenza (ingresso – uscita)</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Richiesta_corrente')?['OraIngresso']} – @{outputs('Richiesta_corrente')?['OraUscita']} (@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreFrequentate'], 0)), '0.##', 'it-IT')} ore)</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreRetribuiteRichieste'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore gettone richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreGettoneRichieste'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite riconosciute dal coordinatore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreRetribuiteCoord'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore gettone riconosciute dal coordinatore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreGettoneCoord'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite approvate HR</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{if(equals(outputs('Azione'), 'valida'), formatNumber(float(coalesce(outputs('Ore_HR')?['retribuite'], 0)), '0.##', 'it-IT'), '—')}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore gettone approvate HR</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{if(equals(outputs('Azione'), 'valida'), formatNumber(float(coalesce(outputs('Ore_HR')?['gettone'], 0)), '0.##', 'it-IT'), '—')}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Stato</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><span style=\"background:@{outputs('Testi_esito')?['colore']};color:#FFFFFF;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:600\">@{outputs('Testi_esito')?['stato']}</span></td></tr></table><div style=\"margin:0 0 16px 0;padding:10px 14px;background:#F3F2F1;border-left:4px solid #005E7D;line-height:1.5\"><b>@{outputs('Testi_esito')?['notaTitolo']}</b><br>@{if(empty(outputs('Nota')), '—', replace(replace(replace(replace(string(coalesce(outputs('Nota'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), decodeUriComponent('%0A'), '<br>'))}</div><p style=\"margin:24px 0 8px 0\"><a href=\"@{concat(outputs('Configurazione')?['AppUrl'], '&richiesta=', string(outputs('Id_corrente')))}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri la richiesta</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                              "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                              "emailMessage/Importance": "Normal"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          }
+                        },
+                        "Registro_email_non_riuscita_esito_HR": {
+                          "type": "OpenApiConnection",
+                          "runAfter": {
+                            "Email_lavoratore_esito_HR": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          },
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "PostItem",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@variables('SitoUrl')",
+                              "table": "Registro modifiche",
+                              "item/Title": "E-mail al lavoratore non riuscita",
+                              "item/RichiestaRif": "@outputs('Id_corrente')",
+                              "item/IdRichiesta": "@{outputs('Richiesta_corrente')?['Title']}",
+                              "item/Tabella": "Richieste formazione",
+                              "item/IdRecord": "@{string(outputs('Id_corrente'))}",
+                              "item/Ruolo/Value": "@outputs('Ruolo_registro')",
+                              "item/LoginAutore": "@outputs('Chiamante')",
+                              "item/Nota": "Invio non riuscito a @{outputs('Richiesta_corrente')?['EmailPersonale']}: notifica «@{outputs('Testi_esito')?['oggetto']} – @{outputs('Richiesta_corrente')?['Title']}»."
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Registro_email_mancante_esito_HR": {
+                            "type": "OpenApiConnection",
+                            "runAfter": {},
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "PostItem",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@variables('SitoUrl')",
+                                "table": "Registro modifiche",
+                                "item/Title": "E-mail al lavoratore non inviata",
+                                "item/RichiestaRif": "@outputs('Id_corrente')",
+                                "item/IdRichiesta": "@{outputs('Richiesta_corrente')?['Title']}",
+                                "item/Tabella": "Richieste formazione",
+                                "item/IdRecord": "@{string(outputs('Id_corrente'))}",
+                                "item/Ruolo/Value": "@outputs('Ruolo_registro')",
+                                "item/LoginAutore": "@outputs('Chiamante')",
+                                "item/Nota": "E-mail personale mancante: notifica «@{outputs('Testi_esito')?['oggetto']} – @{outputs('Richiesta_corrente')?['Title']}» non inviata."
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "Se_email_coordinatore_esito_HR": {
+                      "type": "If",
+                      "runAfter": {
+                        "Se_email_lavoratore_esito_HR": [
+                          "Succeeded"
+                        ]
+                      },
+                      "expression": {
+                        "and": [
+                          {
+                            "equals": [
+                              "@not(empty(if(empty(outputs('Richiesta_corrente')?['CoordinatoreEmail']), outputs('Richiesta_corrente')?['CoordinatoreLogin'], outputs('Richiesta_corrente')?['CoordinatoreEmail'])))",
+                              true
+                            ]
+                          }
+                        ]
+                      },
+                      "actions": {
+                        "Email_coordinatore_esito_HR": {
+                          "type": "OpenApiConnection",
+                          "runAfter": {},
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_office365",
+                              "operationId": "SendEmailV2",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                            },
+                            "parameters": {
+                              "emailMessage/To": "@{if(empty(outputs('Richiesta_corrente')?['CoordinatoreEmail']), outputs('Richiesta_corrente')?['CoordinatoreLogin'], outputs('Richiesta_corrente')?['CoordinatoreEmail'])}",
+                              "emailMessage/Subject": "@{outputs('Testi_esito')?['oggetto']} – @{outputs('Richiesta_corrente')?['Title']} – @{concat(outputs('Richiesta_corrente')?['Cognome'], ' ', outputs('Richiesta_corrente')?['Nome'])}",
+                              "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">@{outputs('Testi_esito')?['titoloCoordinatore']}</p><p style=\"margin:0 0 16px 0;line-height:1.5\">@{outputs('Testi_esito')?['introCoordinatore']}</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">ID richiesta</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{outputs('Richiesta_corrente')?['Title']}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Lavoratore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(concat(outputs('Richiesta_corrente')?['Cognome'], ' ', outputs('Richiesta_corrente')?['Nome']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Servizio / centro di costo</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(outputs('Richiesta_corrente')?['Servizio'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} – @{replace(replace(replace(string(coalesce(outputs('Richiesta_corrente')?['CentroDiCosto'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Corso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(if(empty(outputs('Richiesta_corrente')?['TitoloCorsoCatalogo']), coalesce(outputs('Richiesta_corrente')?['TitoloCorsoLibero'], ''), outputs('Richiesta_corrente')?['TitoloCorsoCatalogo']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} (@{replace(replace(replace(string(coalesce(outputs('Richiesta_corrente')?['CodiceCorso'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')})</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data sessione</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{if(empty(outputs('Richiesta_corrente')?['DataSessione']), '', formatDateTime(if(empty(outputs('Richiesta_corrente')?['DataSessione']), null, if(equals(length(string(outputs('Richiesta_corrente')?['DataSessione'])), 10), string(outputs('Richiesta_corrente')?['DataSessione']), convertFromUtc(string(outputs('Richiesta_corrente')?['DataSessione']), 'W. Europe Standard Time', 'yyyy-MM-dd'))), 'dd/MM/yyyy'))}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Orario sessione</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Richiesta_corrente')?['OraInizioSessione']} – @{outputs('Richiesta_corrente')?['OraFineSessione']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Presenza (ingresso – uscita)</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Richiesta_corrente')?['OraIngresso']} – @{outputs('Richiesta_corrente')?['OraUscita']} (@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreFrequentate'], 0)), '0.##', 'it-IT')} ore)</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreRetribuiteRichieste'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore gettone richieste</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreGettoneRichieste'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite riconosciute dal coordinatore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreRetribuiteCoord'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore gettone riconosciute dal coordinatore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{formatNumber(float(coalesce(outputs('Richiesta_corrente')?['OreGettoneCoord'], 0)), '0.##', 'it-IT')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore retribuite approvate HR</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{if(equals(outputs('Azione'), 'valida'), formatNumber(float(coalesce(outputs('Ore_HR')?['retribuite'], 0)), '0.##', 'it-IT'), '—')}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Ore gettone approvate HR</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{if(equals(outputs('Azione'), 'valida'), formatNumber(float(coalesce(outputs('Ore_HR')?['gettone'], 0)), '0.##', 'it-IT'), '—')}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Stato</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><span style=\"background:@{outputs('Testi_esito')?['colore']};color:#FFFFFF;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:600\">@{outputs('Testi_esito')?['stato']}</span></td></tr></table><div style=\"margin:0 0 16px 0;padding:10px 14px;background:#F3F2F1;border-left:4px solid #005E7D;line-height:1.5\"><b>@{outputs('Testi_esito')?['notaTitolo']}</b><br>@{if(empty(outputs('Nota')), '—', replace(replace(replace(replace(string(coalesce(outputs('Nota'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), decodeUriComponent('%0A'), '<br>'))}</div><p style=\"margin:24px 0 8px 0\"><a href=\"@{concat(outputs('Configurazione')?['AppUrl'], '&richiesta=', string(outputs('Id_corrente')))}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri la richiesta</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                              "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                              "emailMessage/Importance": "Normal"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          }
+                        },
+                        "Registro_email_coordinatore_non_riuscita": {
+                          "type": "OpenApiConnection",
+                          "runAfter": {
+                            "Email_coordinatore_esito_HR": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          },
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "PostItem",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@variables('SitoUrl')",
+                              "table": "Registro modifiche",
+                              "item/Title": "E-mail al coordinatore non riuscita",
+                              "item/RichiestaRif": "@outputs('Id_corrente')",
+                              "item/IdRichiesta": "@{outputs('Richiesta_corrente')?['Title']}",
+                              "item/Tabella": "Richieste formazione",
+                              "item/IdRecord": "@{string(outputs('Id_corrente'))}",
+                              "item/Ruolo/Value": "@outputs('Ruolo_registro')",
+                              "item/LoginAutore": "@outputs('Chiamante')",
+                              "item/Nota": "Invio non riuscito a @{if(empty(outputs('Richiesta_corrente')?['CoordinatoreEmail']), outputs('Richiesta_corrente')?['CoordinatoreLogin'], outputs('Richiesta_corrente')?['CoordinatoreEmail'])}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      }
+                    },
+                    "Aggiungi_elaborata": {
+                      "type": "AppendToArrayVariable",
+                      "runAfter": {
+                        "Se_email_coordinatore_esito_HR": [
+                          "Succeeded"
+                        ]
+                      },
+                      "inputs": {
+                        "name": "Elaborate",
+                        "value": "@outputs('Id_corrente')"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "runtimeConfiguration": {
+              "concurrency": {
+                "repetitions": 10
+              }
+            }
+          },
+          "Motivi_scarto": {
+            "type": "Select",
+            "runAfter": {
+              "Per_ogni_richiesta": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@variables('Scartate')",
+              "select": "@concat(if(empty(item()?['idRichiesta']), string(item()?['id']), item()?['idRichiesta']), ': ', item()?['motivo'])"
+            }
+          },
+          "Dati_esito_HR": {
+            "type": "Compose",
+            "runAfter": {
+              "Motivi_scarto": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "elaborate": "@length(variables('Elaborate'))",
+              "scartate": "@variables('Scartate')"
+            }
+          },
+          "Se_risposta_finale": {
+            "type": "If",
+            "runAfter": {
+              "Dati_esito_HR": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@lessOrEquals(length(outputs('Richieste_da_elaborare')), 25)",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Rispondi_esito_HR": {
+                "type": "Response",
+                "kind": "PowerApp",
+                "runAfter": {},
+                "inputs": {
+                  "statusCode": 200,
+                  "body": {
+                    "esito": "@{if(and(equals(length(variables('Elaborate')), 0), greater(length(variables('Scartate')), 0)), 'ERRORE', 'OK')}",
+                    "messaggio": "@{if(equals(length(variables('Elaborate')), 0), concat('Nessuna richiesta elaborata: ', join(body('Motivi_scarto'), ' · ')), concat('Richieste elaborate: ', string(length(variables('Elaborate'))), ' (', outputs('Testi_esito')?['stato'], ').', if(greater(length(variables('Scartate')), 0), concat(' Scartate: ', join(body('Motivi_scarto'), ' · ')), '')))}",
+                    "dati": "@string(outputs('Dati_esito_HR'))"
+                  },
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "esito": {
+                        "title": "esito",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "messaggio": {
+                        "title": "messaggio",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "dati": {
+                        "title": "dati",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "else": {
+              "actions": {
+                "Email_riepilogo_esito_HR": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@{concat(outputs('Chiamante'), ';', outputs('Configurazione')?['EmailHR'])}",
+                      "emailMessage/Subject": "Esito elaborazione HR – @{outputs('Testi_esito')?['stato']}: @{string(length(variables('Elaborate')))} richieste elaborate",
+                      "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Elaborazione completata</p><p style=\"margin:0 0 16px 0;line-height:1.5\">L'elaborazione avviata da @{outputs('Chiamante')} è terminata.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Azione</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Azione')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste selezionate</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{string(length(outputs('Richieste_da_elaborare')))}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste elaborate</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\"><b>@{string(length(variables('Elaborate')))}</b></td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Richieste scartate</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{string(length(variables('Scartate')))}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Dettaglio scartate</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{if(equals(length(variables('Scartate')), 0), '—', join(body('Motivi_scarto'), '<br>'))}</td></tr></table><div style=\"margin:0 0 16px 0;padding:10px 14px;background:#F3F2F1;border-left:4px solid #005E7D;line-height:1.5\"><b>Nota inserita</b><br>@{if(empty(outputs('Nota')), '—', replace(replace(replace(replace(string(coalesce(outputs('Nota'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), decodeUriComponent('%0A'), '<br>'))}</div><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Configurazione')?['AppUrl']}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'app</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                      "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                      "emailMessage/Importance": "Normal"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Errore": {
+        "description": "Eseguito solo se 'Prova' non riesce: risponde con un errore generico e avvisa HR.",
+        "type": "Scope",
+        "runAfter": {
+          "Prova": [
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "actions": {
+          "Rispondi_errore_imprevisto": {
+            "type": "Response",
+            "kind": "PowerApp",
+            "runAfter": {},
+            "inputs": {
+              "statusCode": 200,
+              "body": {
+                "esito": "ERRORE",
+                "messaggio": "Si è verificato un errore imprevisto. Riprova più tardi o contatta l'Ufficio HR/Formazione.",
+                "dati": "{}"
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "esito": {
+                    "title": "esito",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "messaggio": {
+                    "title": "messaggio",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "dati": {
+                    "title": "dati",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "Link_esecuzione": {
+            "type": "Compose",
+            "runAfter": {
+              "Rispondi_errore_imprevisto": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": "@concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])"
+          },
+          "Azioni_non_riuscite": {
+            "type": "Query",
+            "runAfter": {
+              "Link_esecuzione": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@result('Prova')",
+              "where": "@equals(item()?['status'], 'Failed')"
+            }
+          },
+          "Dettaglio_azioni_non_riuscite": {
+            "type": "Select",
+            "runAfter": {
+              "Azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Azioni_non_riuscite')",
+              "select": "@concat(item()?['name'], ': ', coalesce(item()?['error']?['message'], item()?['code'], ''))"
+            }
+          },
+          "Avvisa_HR_errore": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Dettaglio_azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_office365",
+                "operationId": "SendEmailV2",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+              },
+              "parameters": {
+                "emailMessage/To": "@{outputs('Configurazione')?['EmailHR']}",
+                "emailMessage/Subject": "Errore nel flusso @{workflow()?['tags']?['flowDisplayName']}",
+                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Errore in un flusso</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Un flusso dell'app non è stato completato. Apri l'esecuzione per i dettagli.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Flusso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{workflow()?['tags']?['flowDisplayName']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data e ora</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{convertFromUtc(utcNow(), 'W. Europe Standard Time', 'dd/MM/yyyy HH:mm')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Utente che ha chiamato</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Chiamante')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Azioni non riuscite</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(join(body('Dettaglio_azioni_non_riuscite'), ' | '), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr></table><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Link_esecuzione')}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'esecuzione</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                "emailMessage/Importance": "High"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Termina_con_errore": {
+            "type": "Terminate",
+            "runAfter": {
+              "Avvisa_HR_errore": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": {
+              "runStatus": "Failed",
+              "runError": {
+                "code": "ErroreFlusso",
+                "message": "Errore nel blocco Prova: vedere le azioni non riuscite."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

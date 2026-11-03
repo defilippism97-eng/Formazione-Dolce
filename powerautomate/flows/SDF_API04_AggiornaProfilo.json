@@ -1,0 +1,825 @@
+{
+  "name": "SDF_API04_AggiornaProfilo",
+  "description": "API04 – Il lavoratore aggiorna e-mail personale e codice fiscale o segnala a HR una variazione dei dati. Parametri: emailPersonale, codiceFiscale, segnalazione (\"\" = non modificare).",
+  "connectionReferences": {
+    "shared_sharepointonline": {
+      "connectionName": "shared-sharepointonl-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "tier": "NotSpecified"
+    },
+    "shared_office365": {
+      "connectionName": "shared-office365-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365",
+      "tier": "NotSpecified"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      },
+      "$authentication": {
+        "defaultValue": {},
+        "type": "SecureObject"
+      }
+    },
+    "triggers": {
+      "manual": {
+        "type": "Request",
+        "kind": "PowerAppV2",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "title": "emailPersonale",
+                "type": "string",
+                "x-ms-dynamically-added": true,
+                "description": "E-mail personale per le notifiche (\"\" = non modificare)",
+                "x-ms-content-hint": "TEXT"
+              },
+              "text_1": {
+                "title": "codiceFiscale",
+                "type": "string",
+                "x-ms-dynamically-added": true,
+                "description": "Codice fiscale (\"\" = non modificare)",
+                "x-ms-content-hint": "TEXT"
+              },
+              "text_2": {
+                "title": "segnalazione",
+                "type": "string",
+                "x-ms-dynamically-added": true,
+                "description": "Segnalazione di variazione dei dati a HR (\"\" = nessuna)",
+                "x-ms-content-hint": "TEXT"
+              }
+            },
+            "required": [
+              "text",
+              "text_1",
+              "text_2"
+            ]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Inizializza_SitoUrl": {
+        "type": "InitializeVariable",
+        "runAfter": {},
+        "inputs": {
+          "variables": [
+            {
+              "name": "SitoUrl",
+              "type": "string",
+              "value": "{{SITO_URL}}"
+            }
+          ]
+        }
+      },
+      "Chiamante": {
+        "description": "Identità di chi chiama, dall'intestazione della chiamata di Power Apps.",
+        "type": "Compose",
+        "runAfter": {
+          "Inizializza_SitoUrl": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@toLower(trim(coalesce(triggerOutputs()?['headers']?['x-ms-user-email'], '')))"
+      },
+      "Chiamante_OData": {
+        "type": "Compose",
+        "runAfter": {
+          "Chiamante": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@replace(outputs('Chiamante'), '''', '''''')"
+      },
+      "Leggi_configurazione": {
+        "description": "Legge i parametri della lista Configurazione.",
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Chiamante_OData": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "@variables('SitoUrl')",
+            "table": "Configurazione",
+            "$top": 500
+          },
+          "authentication": "@parameters('$authentication')"
+        }
+      },
+      "Seleziona_configurazione": {
+        "type": "Select",
+        "runAfter": {
+          "Leggi_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Leggi_configurazione')?['value']",
+          "select": {
+            "@item()?['Title']": "@item()?['Valore']"
+          }
+        }
+      },
+      "Configurazione": {
+        "description": "Oggetto chiave/valore: outputs('Configurazione')?['EmailHR'], ?['AppUrl'], ...",
+        "type": "Compose",
+        "runAfter": {
+          "Seleziona_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@json(replace(replace(replace(string(body('Seleziona_configurazione')),'[{','{'),'}]','}'),'},{',','))"
+      },
+      "Prova": {
+        "type": "Scope",
+        "runAfter": {
+          "Configurazione": [
+            "Succeeded"
+          ]
+        },
+        "actions": {
+          "Leggi_lavoratore": {
+            "type": "OpenApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Lavoratori",
+                "$filter": "Login eq '@{outputs('Chiamante_OData')}'",
+                "$top": 1
+              },
+              "authentication": "@parameters('$authentication')"
+            },
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Lavoratore": {
+            "type": "Compose",
+            "runAfter": {
+              "Leggi_lavoratore": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@first(body('Leggi_lavoratore')?['value'])",
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "inputs",
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Valori_profilo": {
+            "type": "Compose",
+            "runAfter": {
+              "Lavoratore": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "email": "@trim(coalesce(triggerBody()?['text'], ''))",
+              "cf": "@toUpper(replace(trim(coalesce(triggerBody()?['text_1'], '')), ' ', ''))",
+              "segnalazione": "@trim(coalesce(triggerBody()?['text_2'], ''))"
+            },
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "inputs",
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Caratteri_cf": {
+            "description": "Verifica carattere per carattere che il codice fiscale sia alfanumerico.",
+            "type": "Select",
+            "runAfter": {
+              "Valori_profilo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@range(0, max(length(outputs('Valori_profilo')?['cf']), 1))",
+              "select": "@contains('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', substring(concat(outputs('Valori_profilo')?['cf'], '#'), item(), 1))"
+            },
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "inputs",
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Caratteri_cf_non_validi": {
+            "type": "Query",
+            "runAfter": {
+              "Caratteri_cf": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Caratteri_cf')",
+              "where": "@equals(item(), false)"
+            }
+          },
+          "Controlli_profilo": {
+            "type": "Compose",
+            "runAfter": {
+              "Caratteri_cf_non_validi": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@createArray(if(empty(outputs('Lavoratore')), 'Utente non censito: contatta l''Ufficio HR/Formazione.', ''), if(and(not(empty(outputs('Valori_profilo')?['email'])), or(not(contains(outputs('Valori_profilo')?['email'], '@')), not(contains(outputs('Valori_profilo')?['email'], '.')), contains(outputs('Valori_profilo')?['email'], ' '), greater(length(outputs('Valori_profilo')?['email']), 255))), 'Indirizzo e-mail personale non valido.', ''), if(and(not(empty(outputs('Valori_profilo')?['cf'])), or(not(equals(length(outputs('Valori_profilo')?['cf']), 16)), greater(length(body('Caratteri_cf_non_validi')), 0))), 'Codice fiscale non valido: deve contenere 16 caratteri alfanumerici.', ''), if(greater(length(outputs('Valori_profilo')?['segnalazione']), 2000), 'La segnalazione è troppo lunga (massimo 2000 caratteri).', ''))"
+          },
+          "Errori_profilo": {
+            "type": "Query",
+            "runAfter": {
+              "Controlli_profilo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@outputs('Controlli_profilo')",
+              "where": "@not(empty(item()))"
+            }
+          },
+          "Se_errori_profilo": {
+            "type": "If",
+            "runAfter": {
+              "Errori_profilo": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@not(empty(join(body('Errori_profilo'), ' · ')))",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Rispondi_errori_profilo": {
+                "type": "Response",
+                "kind": "PowerApp",
+                "runAfter": {},
+                "inputs": {
+                  "statusCode": 200,
+                  "body": {
+                    "esito": "ERRORE",
+                    "messaggio": "@{join(body('Errori_profilo'), ' · ')}",
+                    "dati": "@string(json(concat('{\"errori\":', string(body('Errori_profilo')), '}')))"
+                  },
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "esito": {
+                        "title": "esito",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "messaggio": {
+                        "title": "messaggio",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      },
+                      "dati": {
+                        "title": "dati",
+                        "x-ms-dynamically-added": true,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "Termina_errori_profilo": {
+                "type": "Terminate",
+                "runAfter": {
+                  "Rispondi_errori_profilo": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "runStatus": "Succeeded"
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Nuovi_dati_profilo": {
+            "type": "Compose",
+            "runAfter": {
+              "Se_errori_profilo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "email": "@if(empty(outputs('Valori_profilo')?['email']), coalesce(outputs('Lavoratore')?['EmailPersonale'], ''), outputs('Valori_profilo')?['email'])",
+              "emailCambiata": "@and(not(empty(outputs('Valori_profilo')?['email'])), not(equals(toLower(outputs('Valori_profilo')?['email']), toLower(coalesce(outputs('Lavoratore')?['EmailPersonale'], '')))))",
+              "cf": "@if(empty(outputs('Valori_profilo')?['cf']), outputs('Lavoratore')?['CodiceFiscale'], outputs('Valori_profilo')?['cf'])",
+              "cfCambiato": "@and(not(empty(outputs('Valori_profilo')?['cf'])), not(equals(outputs('Valori_profilo')?['cf'], coalesce(outputs('Lavoratore')?['CodiceFiscale'], ''))))",
+              "cfMascherato": "@if(empty(outputs('Valori_profilo')?['cf']), coalesce(outputs('Lavoratore')?['CFMascherato'], ''), concat(substring(outputs('Valori_profilo')?['cf'], 0, 3), '**********', substring(outputs('Valori_profilo')?['cf'], 13, 3)))",
+              "cfRegistrato": "@or(equals(outputs('Lavoratore')?['CFRegistrato'], true), not(empty(outputs('Valori_profilo')?['cf'])))",
+              "segnalazione": "@if(empty(outputs('Valori_profilo')?['segnalazione']), outputs('Lavoratore')?['SegnalazioneVariazione'], concat('[', formatDateTime(convertFromUtc(utcNow(), 'W. Europe Standard Time'), 'dd/MM/yyyy'), '] ', outputs('Valori_profilo')?['segnalazione'], if(empty(outputs('Lavoratore')?['SegnalazioneVariazione']), '', concat(decodeUriComponent('%0A'), outputs('Lavoratore')?['SegnalazioneVariazione']))))",
+              "segnalazioneAperta": "@or(equals(outputs('Lavoratore')?['SegnalazioneAperta'], true), not(empty(outputs('Valori_profilo')?['segnalazione'])))"
+            },
+            "runtimeConfiguration": {
+              "secureData": {
+                "properties": [
+                  "inputs",
+                  "outputs"
+                ]
+              }
+            }
+          },
+          "Se_profilo_da_aggiornare": {
+            "description": "Scrive solo se qualcosa è cambiato.",
+            "type": "If",
+            "runAfter": {
+              "Nuovi_dati_profilo": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@or(outputs('Nuovi_dati_profilo')?['emailCambiata'], outputs('Nuovi_dati_profilo')?['cfCambiato'], not(empty(outputs('Valori_profilo')?['segnalazione'])))",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Aggiorna_lavoratore": {
+                "description": "Aggiorna solo la lista Lavoratori (il CF in chiaro resta solo qui).",
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "PatchItem",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "table": "Lavoratori",
+                    "id": "@outputs('Lavoratore')?['ID']",
+                    "item/Title": "@outputs('Lavoratore')?['Title']",
+                    "item/Login": "@outputs('Lavoratore')?['Login']",
+                    "item/Cognome": "@outputs('Lavoratore')?['Cognome']",
+                    "item/Nome": "@outputs('Lavoratore')?['Nome']",
+                    "item/EmailPersonale": "@outputs('Nuovi_dati_profilo')?['email']",
+                    "item/CodiceFiscale": "@outputs('Nuovi_dati_profilo')?['cf']",
+                    "item/CFMascherato": "@outputs('Nuovi_dati_profilo')?['cfMascherato']",
+                    "item/CFRegistrato": "@outputs('Nuovi_dati_profilo')?['cfRegistrato']",
+                    "item/SegnalazioneVariazione": "@outputs('Nuovi_dati_profilo')?['segnalazione']",
+                    "item/SegnalazioneAperta": "@outputs('Nuovi_dati_profilo')?['segnalazioneAperta']"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                },
+                "runtimeConfiguration": {
+                  "secureData": {
+                    "properties": [
+                      "inputs",
+                      "outputs"
+                    ]
+                  }
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Se_email_cambiata": {
+            "type": "If",
+            "runAfter": {
+              "Se_profilo_da_aggiornare": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@outputs('Nuovi_dati_profilo')?['emailCambiata']",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Registro_email_personale": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "PostItem",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "table": "Registro modifiche",
+                    "item/Title": "Aggiornamento e-mail personale",
+                    "item/Tabella": "Lavoratori",
+                    "item/IdRecord": "@{string(outputs('Lavoratore')?['ID'])}",
+                    "item/Campo": "EmailPersonale",
+                    "item/ValorePrecedente": "@{coalesce(outputs('Lavoratore')?['EmailPersonale'], '')}",
+                    "item/ValoreNuovo": "@{outputs('Nuovi_dati_profilo')?['email']}",
+                    "item/Ruolo/Value": "Lavoratore",
+                    "item/LoginAutore": "@outputs('Chiamante')"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Leggi_richieste_modificabili": {
+                "description": "Richieste ancora in Bozza o in integrazione: ricevono la nuova e-mail.",
+                "type": "OpenApiConnection",
+                "runAfter": {
+                  "Registro_email_personale": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "GetItems",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "table": "Richieste formazione",
+                    "$filter": "LavoratoreLogin eq '@{outputs('Chiamante_OData')}' and (Stato eq 'Bozza' or Stato eq 'Integrazione richiesta dal coordinatore' or Stato eq 'Integrazione richiesta da HR')",
+                    "$top": 5000
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Per_ogni_richiesta_modificabile": {
+                "type": "Foreach",
+                "runAfter": {
+                  "Leggi_richieste_modificabili": [
+                    "Succeeded"
+                  ]
+                },
+                "foreach": "@body('Leggi_richieste_modificabili')?['value']",
+                "actions": {
+                  "Aggiorna_email_richiesta": {
+                    "type": "OpenApiConnection",
+                    "runAfter": {},
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "PatchItem",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "@variables('SitoUrl')",
+                        "table": "Richieste formazione",
+                        "id": "@items('Per_ogni_richiesta_modificabile')?['ID']",
+                        "item/Title": "@items('Per_ogni_richiesta_modificabile')?['Title']",
+                        "item/EmailPersonale": "@outputs('Nuovi_dati_profilo')?['email']"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    }
+                  }
+                },
+                "runtimeConfiguration": {
+                  "concurrency": {
+                    "repetitions": 5
+                  }
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Se_cf_cambiato": {
+            "description": "Nel registro il codice fiscale non viene mai scritto.",
+            "type": "If",
+            "runAfter": {
+              "Se_email_cambiata": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@outputs('Nuovi_dati_profilo')?['cfCambiato']",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Registro_codice_fiscale": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "PostItem",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "table": "Registro modifiche",
+                    "item/Title": "Codice fiscale aggiornato",
+                    "item/Tabella": "Lavoratori",
+                    "item/IdRecord": "@{string(outputs('Lavoratore')?['ID'])}",
+                    "item/Campo": "CodiceFiscale",
+                    "item/Ruolo/Value": "Lavoratore",
+                    "item/LoginAutore": "@outputs('Chiamante')",
+                    "item/Nota": "Il valore non viene registrato per riservatezza."
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Dati_risposta_profilo": {
+            "type": "Compose",
+            "runAfter": {
+              "Se_cf_cambiato": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "emailPersonale": "@outputs('Nuovi_dati_profilo')?['email']",
+              "cfRegistrato": "@outputs('Nuovi_dati_profilo')?['cfRegistrato']",
+              "cfMascherato": "@outputs('Nuovi_dati_profilo')?['cfMascherato']",
+              "segnalazioneAperta": "@outputs('Nuovi_dati_profilo')?['segnalazioneAperta']"
+            }
+          },
+          "Rispondi_profilo_aggiornato": {
+            "type": "Response",
+            "kind": "PowerApp",
+            "runAfter": {
+              "Dati_risposta_profilo": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "statusCode": 200,
+              "body": {
+                "esito": "OK",
+                "messaggio": "Profilo aggiornato.",
+                "dati": "@string(outputs('Dati_risposta_profilo'))"
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "esito": {
+                    "title": "esito",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "messaggio": {
+                    "title": "messaggio",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "dati": {
+                    "title": "dati",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "Se_segnalazione": {
+            "type": "If",
+            "runAfter": {
+              "Rispondi_profilo_aggiornato": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@not(empty(outputs('Valori_profilo')?['segnalazione']))",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Registro_segnalazione": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "PostItem",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "table": "Registro modifiche",
+                    "item/Title": "Segnalazione variazione dati",
+                    "item/Tabella": "Lavoratori",
+                    "item/IdRecord": "@{string(outputs('Lavoratore')?['ID'])}",
+                    "item/Campo": "SegnalazioneVariazione",
+                    "item/ValoreNuovo": "@{outputs('Valori_profilo')?['segnalazione']}",
+                    "item/Ruolo/Value": "Lavoratore",
+                    "item/LoginAutore": "@outputs('Chiamante')"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Email_segnalazione_HR": {
+                "type": "OpenApiConnection",
+                "runAfter": {
+                  "Registro_segnalazione": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_office365",
+                    "operationId": "SendEmailV2",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                  },
+                  "parameters": {
+                    "emailMessage/To": "@{outputs('Configurazione')?['EmailHR']}",
+                    "emailMessage/Subject": "Segnalazione variazione dati – @{concat(outputs('Lavoratore')?['Cognome'], ' ', outputs('Lavoratore')?['Nome'])}",
+                    "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Segnalazione di variazione dei dati</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Un lavoratore segnala che i suoi dati organizzativi non sono corretti. Verifica e aggiorna la lista <b>Lavoratori</b>, poi imposta <i>Segnalazione da gestire</i> = No.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Lavoratore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(concat(outputs('Lavoratore')?['Cognome'], ' ', outputs('Lavoratore')?['Nome']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Login</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Chiamante')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Area</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(outputs('Lavoratore')?['Area']?['Value'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Servizio / centro di costo</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(outputs('Lavoratore')?['Servizio'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} – @{replace(replace(replace(string(coalesce(outputs('Lavoratore')?['CentroDiCosto'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Coordinatore</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(outputs('Lavoratore')?['CoordinatoreNome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr></table><div style=\"margin:0 0 16px 0;padding:10px 14px;background:#F3F2F1;border-left:4px solid #005E7D;line-height:1.5\"><b>Testo della segnalazione</b><br>@{replace(replace(replace(replace(string(coalesce(outputs('Valori_profilo')?['segnalazione'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), decodeUriComponent('%0A'), '<br>')}</div><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Configurazione')?['AppUrl']}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'app</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                    "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                    "emailMessage/Importance": "Normal"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          }
+        }
+      },
+      "Errore": {
+        "description": "Eseguito solo se 'Prova' non riesce: risponde con un errore generico e avvisa HR.",
+        "type": "Scope",
+        "runAfter": {
+          "Prova": [
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "actions": {
+          "Rispondi_errore_imprevisto": {
+            "type": "Response",
+            "kind": "PowerApp",
+            "runAfter": {},
+            "inputs": {
+              "statusCode": 200,
+              "body": {
+                "esito": "ERRORE",
+                "messaggio": "Si è verificato un errore imprevisto. Riprova più tardi o contatta l'Ufficio HR/Formazione.",
+                "dati": "{}"
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "esito": {
+                    "title": "esito",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "messaggio": {
+                    "title": "messaggio",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  },
+                  "dati": {
+                    "title": "dati",
+                    "x-ms-dynamically-added": true,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "Link_esecuzione": {
+            "type": "Compose",
+            "runAfter": {
+              "Rispondi_errore_imprevisto": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": "@concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])"
+          },
+          "Azioni_non_riuscite": {
+            "type": "Query",
+            "runAfter": {
+              "Link_esecuzione": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@result('Prova')",
+              "where": "@equals(item()?['status'], 'Failed')"
+            }
+          },
+          "Dettaglio_azioni_non_riuscite": {
+            "type": "Select",
+            "runAfter": {
+              "Azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Azioni_non_riuscite')",
+              "select": "@concat(item()?['name'], ': ', coalesce(item()?['error']?['message'], item()?['code'], ''))"
+            }
+          },
+          "Avvisa_HR_errore": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Dettaglio_azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_office365",
+                "operationId": "SendEmailV2",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+              },
+              "parameters": {
+                "emailMessage/To": "@{outputs('Configurazione')?['EmailHR']}",
+                "emailMessage/Subject": "Errore nel flusso @{workflow()?['tags']?['flowDisplayName']}",
+                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Errore in un flusso</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Un flusso dell'app non è stato completato. Apri l'esecuzione per i dettagli.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Flusso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{workflow()?['tags']?['flowDisplayName']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data e ora</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{convertFromUtc(utcNow(), 'W. Europe Standard Time', 'dd/MM/yyyy HH:mm')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Utente che ha chiamato</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{outputs('Chiamante')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Azioni non riuscite</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(join(body('Dettaglio_azioni_non_riuscite'), ' | '), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr></table><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Link_esecuzione')}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'esecuzione</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                "emailMessage/Importance": "High"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Termina_con_errore": {
+            "type": "Terminate",
+            "runAfter": {
+              "Avvisa_HR_errore": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": {
+              "runStatus": "Failed",
+              "runError": {
+                "code": "ErroreFlusso",
+                "message": "Errore nel blocco Prova: vedere le azioni non riuscite."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

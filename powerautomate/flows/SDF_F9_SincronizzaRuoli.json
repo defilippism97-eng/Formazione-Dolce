@@ -1,0 +1,526 @@
+{
+  "name": "SDF_F9_SincronizzaRuoli",
+  "description": "F9 – Quando un elemento Ruoli applicativi viene creato o modificato: aggiunge o toglie l'utente dal gruppo 'Formazione - HR' e dai Proprietari del sito secondo i ruoli attivi. Non tocca mai l'account di servizio.",
+  "connectionReferences": {
+    "shared_sharepointonline": {
+      "connectionName": "shared-sharepointonl-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "tier": "NotSpecified"
+    },
+    "shared_office365": {
+      "connectionName": "shared-office365-00000000-0000-0000-0000-000000000000",
+      "source": "Embedded",
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365",
+      "tier": "NotSpecified"
+    }
+  },
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      },
+      "$authentication": {
+        "defaultValue": {},
+        "type": "SecureObject"
+      }
+    },
+    "triggers": {
+      "Quando_un_ruolo_viene_creato_o_modificato": {
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 2
+        },
+        "splitOn": "@triggerBody()?['value']",
+        "type": "OpenApiConnection",
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetOnUpdatedItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "{{SITO_URL}}",
+            "table": "Ruoli applicativi"
+          },
+          "authentication": "@parameters('$authentication')"
+        },
+        "runtimeConfiguration": {
+          "concurrency": {
+            "runs": 1
+          }
+        }
+      }
+    },
+    "actions": {
+      "Inizializza_SitoUrl": {
+        "type": "InitializeVariable",
+        "runAfter": {},
+        "inputs": {
+          "variables": [
+            {
+              "name": "SitoUrl",
+              "type": "string",
+              "value": "{{SITO_URL}}"
+            }
+          ]
+        }
+      },
+      "Leggi_configurazione": {
+        "description": "Legge i parametri della lista Configurazione.",
+        "type": "OpenApiConnection",
+        "runAfter": {
+          "Inizializza_SitoUrl": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "host": {
+            "connectionName": "shared_sharepointonline",
+            "operationId": "GetItems",
+            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+          },
+          "parameters": {
+            "dataset": "@variables('SitoUrl')",
+            "table": "Configurazione",
+            "$top": 500
+          },
+          "authentication": "@parameters('$authentication')"
+        }
+      },
+      "Seleziona_configurazione": {
+        "type": "Select",
+        "runAfter": {
+          "Leggi_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "from": "@body('Leggi_configurazione')?['value']",
+          "select": {
+            "@item()?['Title']": "@item()?['Valore']"
+          }
+        }
+      },
+      "Configurazione": {
+        "description": "Oggetto chiave/valore: outputs('Configurazione')?['EmailHR'], ?['AppUrl'], ...",
+        "type": "Compose",
+        "runAfter": {
+          "Seleziona_configurazione": [
+            "Succeeded"
+          ]
+        },
+        "inputs": "@json(replace(replace(replace(string(body('Seleziona_configurazione')),'[{','{'),'}]','}'),'},{',','))"
+      },
+      "Prova": {
+        "type": "Scope",
+        "runAfter": {
+          "Configurazione": [
+            "Succeeded"
+          ]
+        },
+        "actions": {
+          "Login_utente": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": "@toLower(trim(if(empty(trim(coalesce(triggerBody()?['Title'], ''))), last(split(coalesce(triggerBody()?['Utente']?['Claims'], ''), '|')), triggerBody()?['Title'])))"
+          },
+          "Account_servizio": {
+            "type": "Compose",
+            "runAfter": {
+              "Login_utente": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@toLower(trim(coalesce(outputs('Configurazione')?['AccountServizio'], '')))"
+          },
+          "Se_utente_da_ignorare": {
+            "description": "Login vuoto o account di servizio: nessuna modifica ai gruppi.",
+            "type": "If",
+            "runAfter": {
+              "Account_servizio": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@or(empty(outputs('Login_utente')), not(contains(outputs('Login_utente'), '@')), equals(outputs('Login_utente'), outputs('Account_servizio')))",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Termina_utente_ignorato": {
+                "type": "Terminate",
+                "runAfter": {},
+                "inputs": {
+                  "runStatus": "Succeeded"
+                }
+              }
+            },
+            "else": {
+              "actions": {}
+            }
+          },
+          "Leggi_ruoli_utente": {
+            "description": "Tutti gli elementi dell'utente: il gruppo dipende da tutti i ruoli attivi.",
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Se_utente_da_ignorare": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "GetItems",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Ruoli applicativi",
+                "$filter": "Title eq '@{replace(string(outputs('Login_utente')), '''', '''''')}'",
+                "$top": 50
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Ruoli_attivi_utente": {
+            "type": "Query",
+            "runAfter": {
+              "Leggi_ruoli_utente": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Leggi_ruoli_utente')?['value']",
+              "where": "@equals(item()?['Attivo'], true)"
+            }
+          },
+          "Elenco_ruoli_attivi": {
+            "type": "Select",
+            "runAfter": {
+              "Ruoli_attivi_utente": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Ruoli_attivi_utente')",
+              "select": "@item()?['Ruolo']?['Value']"
+            }
+          },
+          "Nome_accesso": {
+            "type": "Compose",
+            "runAfter": {
+              "Elenco_ruoli_attivi": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@concat('i:0#.f|membership|', outputs('Login_utente'))"
+          },
+          "Assicura_utente": {
+            "description": "Registra l'utente nel sito se non c'è ancora.",
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Nome_accesso": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "HttpRequest",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "parameters/method": "POST",
+                "parameters/uri": "_api/web/ensureuser",
+                "parameters/headers": {
+                  "Accept": "application/json;odata=nometadata",
+                  "Content-Type": "application/json;odata=nometadata"
+                },
+                "parameters/body": "{\"logonName\":\"@{outputs('Nome_accesso')}\"}"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Se_ruolo_HR": {
+            "description": "Gruppo SharePoint 'Formazione - HR'.",
+            "type": "If",
+            "runAfter": {
+              "Assicura_utente": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@contains(body('Elenco_ruoli_attivi'), 'Formazione HR')",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Aggiungi_a_HR": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "HttpRequest",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "parameters/method": "POST",
+                    "parameters/uri": "_api/web/sitegroups/getbyname('Formazione - HR')/users",
+                    "parameters/headers": {
+                      "Accept": "application/json;odata=nometadata",
+                      "Content-Type": "application/json;odata=nometadata"
+                    },
+                    "parameters/body": "{\"LoginName\":\"@{outputs('Nome_accesso')}\"}"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              }
+            },
+            "else": {
+              "actions": {
+                "Rimuovi_da_HR": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@variables('SitoUrl')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/sitegroups/getbyname('Formazione - HR')/users/removeByLoginName(@v)?@v='@{encodeUriComponent(outputs('Nome_accesso'))}'",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Rimozione_HR_gestita": {
+                  "description": "Se l'utente non era nel gruppo la rimozione fallisce: è normale.",
+                  "type": "Compose",
+                  "runAfter": {
+                    "Rimuovi_da_HR": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  },
+                  "inputs": "@actions('Rimuovi_da_HR')?['status']"
+                }
+              }
+            }
+          },
+          "Se_ruolo_amministratore": {
+            "description": "Gruppo Proprietari del sito.",
+            "type": "If",
+            "runAfter": {
+              "Se_ruolo_HR": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@contains(body('Elenco_ruoli_attivi'), 'Amministratore')",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Aggiungi_a_proprietari": {
+                "type": "OpenApiConnection",
+                "runAfter": {},
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "HttpRequest",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "@variables('SitoUrl')",
+                    "parameters/method": "POST",
+                    "parameters/uri": "_api/web/AssociatedOwnerGroup/users",
+                    "parameters/headers": {
+                      "Accept": "application/json;odata=nometadata",
+                      "Content-Type": "application/json;odata=nometadata"
+                    },
+                    "parameters/body": "{\"LoginName\":\"@{outputs('Nome_accesso')}\"}"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              }
+            },
+            "else": {
+              "actions": {
+                "Rimuovi_da_proprietari": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@variables('SitoUrl')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/AssociatedOwnerGroup/users/removeByLoginName(@v)?@v='@{encodeUriComponent(outputs('Nome_accesso'))}'",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Rimozione_proprietari_gestita": {
+                  "description": "Se l'utente non era nel gruppo la rimozione fallisce: è normale.",
+                  "type": "Compose",
+                  "runAfter": {
+                    "Rimuovi_da_proprietari": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  },
+                  "inputs": "@actions('Rimuovi_da_proprietari')?['status']"
+                }
+              }
+            }
+          },
+          "Registro_sincronizzazione_ruoli": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Se_ruolo_amministratore": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_sharepointonline",
+                "operationId": "PostItem",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+              },
+              "parameters": {
+                "dataset": "@variables('SitoUrl')",
+                "table": "Registro modifiche",
+                "item/Title": "Sincronizzazione gruppi SharePoint",
+                "item/Tabella": "Ruoli applicativi",
+                "item/IdRecord": "@{string(triggerBody()?['ID'])}",
+                "item/Campo": "Ruolo",
+                "item/ValoreNuovo": "@{if(empty(body('Elenco_ruoli_attivi')), 'nessun ruolo attivo', join(body('Elenco_ruoli_attivi'), ', '))}",
+                "item/Ruolo/Value": "Sistema",
+                "item/LoginAutore": "@coalesce(outputs('Configurazione')?['AccountServizio'], 'sistema')",
+                "item/Nota": "@{concat('Utente ', outputs('Login_utente'), ': Formazione - HR = ', if(contains(body('Elenco_ruoli_attivi'), 'Formazione HR'), 'sì', 'no'), ', Proprietari = ', if(contains(body('Elenco_ruoli_attivi'), 'Amministratore'), 'sì', 'no'))}"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          }
+        }
+      },
+      "Errore": {
+        "description": "Eseguito solo se 'Prova' non riesce: risponde con un errore generico e avvisa HR.",
+        "type": "Scope",
+        "runAfter": {
+          "Prova": [
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "actions": {
+          "Link_esecuzione": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": "@concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])"
+          },
+          "Azioni_non_riuscite": {
+            "type": "Query",
+            "runAfter": {
+              "Link_esecuzione": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@result('Prova')",
+              "where": "@equals(item()?['status'], 'Failed')"
+            }
+          },
+          "Dettaglio_azioni_non_riuscite": {
+            "type": "Select",
+            "runAfter": {
+              "Azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@body('Azioni_non_riuscite')",
+              "select": "@concat(item()?['name'], ': ', coalesce(item()?['error']?['message'], item()?['code'], ''))"
+            }
+          },
+          "Avvisa_HR_errore": {
+            "type": "OpenApiConnection",
+            "runAfter": {
+              "Dettaglio_azioni_non_riuscite": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connectionName": "shared_office365",
+                "operationId": "SendEmailV2",
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+              },
+              "parameters": {
+                "emailMessage/To": "@{outputs('Configurazione')?['EmailHR']}",
+                "emailMessage/Subject": "Errore nel flusso @{workflow()?['tags']?['flowDisplayName']}",
+                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#323130;max-width:680px;margin:0 auto\"><div style=\"background:#005E7D;color:#FFFFFF;padding:16px 24px;font-size:18px;font-weight:600\">Gestione ore formazione – Società Dolce</div><div style=\"padding:20px 24px;border:1px solid #E1DFDD;border-top:0\"><p style=\"margin:0 0 12px 0;font-size:17px;font-weight:600;color:#005E7D\">Errore in un flusso</p><p style=\"margin:0 0 16px 0;line-height:1.5\">Un flusso dell'app non è stato completato. Apri l'esecuzione per i dettagli.</p><table style=\"border-collapse:collapse;width:100%;margin:0 0 16px 0\"><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Flusso</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{workflow()?['tags']?['flowDisplayName']}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Data e ora</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{convertFromUtc(utcNow(), 'W. Europe Standard Time', 'dd/MM/yyyy HH:mm')}</td></tr><tr><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;color:#605E5C;width:42%;vertical-align:top\">Azioni non riuscite</td><td style=\"padding:7px 10px;border-bottom:1px solid #EDEBE9;vertical-align:top\">@{replace(replace(replace(string(coalesce(join(body('Dettaglio_azioni_non_riuscite'), ' | '), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr></table><p style=\"margin:24px 0 8px 0\"><a href=\"@{outputs('Link_esecuzione')}\" style=\"background:#005E7D;color:#FFFFFF;text-decoration:none;padding:10px 22px;border-radius:4px;display:inline-block;font-weight:600\">Apri l'esecuzione</a></p></div><div style=\"padding:12px 24px;font-size:12px;color:#8A8886\">Messaggio automatico – non rispondere.</div></div>",
+                "emailMessage/From": "@{coalesce(outputs('Configurazione')?['MittenteEmail'], '')}",
+                "emailMessage/Importance": "High"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Termina_con_errore": {
+            "type": "Terminate",
+            "runAfter": {
+              "Avvisa_HR_errore": [
+                "Succeeded",
+                "Failed",
+                "Skipped",
+                "TimedOut"
+              ]
+            },
+            "inputs": {
+              "runStatus": "Failed",
+              "runError": {
+                "code": "ErroreFlusso",
+                "message": "Errore nel blocco Prova: vedere le azioni non riuscite."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
